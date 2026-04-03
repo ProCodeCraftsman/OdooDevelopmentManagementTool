@@ -361,12 +361,12 @@ Alembic Migration Guidelines
 
 ---
 
-### Phase 8: Data Migration
+### Phase 8: Data Migration ✅ COMPLETED
 **Objective**: One-time script to migrate legacy CSV data to PostgreSQL.
 
 **Tasks**:
-- [ ] Create `backend/scripts/migrate_environments.py` - Import `environments.json` → DB
-- [ ] Create `backend/scripts/migrate_modules.py` - Import `module_master.csv` → DB
+- [x] Create `backend/scripts/migrate_environments.py` - Import `environments.json` → DB
+- [x] Create `backend/scripts/migrate_modules.py` - Import `module_master.csv` → DB
 - [ ] Test migration scripts on sample data
 - [ ] Document migration steps for production
 
