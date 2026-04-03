@@ -5,25 +5,19 @@ import pandas as pd
 import json
 from datetime import datetime
 from pathlib import Path
-from app.core import config_manager
+from app.core import paths, config_manager
 from app.core.odoo_xmlprc_config import OdooModuleReporter 
 from app.core.module_master import update_module_master
 
-# PATH SETUP: Locate the 'data' folder at the project root
-# __file__ is app/core/get_env_module_data.py -> .parent.parent.parent is the root
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-DATA_DIR = BASE_DIR / "data/env_data"
-LOG_FILE = BASE_DIR / "data/env_data/update_log.json"
-MASTER_FILE = BASE_DIR / "data/module_master/module_master.csv"
 
 def update_audit_log(env_name: str, metrics: dict):
     """Updates the central JSON log file with the latest run metadata."""
     log_data = {}
     
     # Load existing logs if the file exists
-    if LOG_FILE.exists():
+    if paths.LOG_FILE.exists():
         try:
-            with open(LOG_FILE, 'r') as f:
+            with open(paths.LOG_FILE, 'r') as f:
                 log_data = json.load(f)
         except json.JSONDecodeError:
             log_data = {}
@@ -32,7 +26,7 @@ def update_audit_log(env_name: str, metrics: dict):
     log_data[env_name] = metrics
 
     # Write back to the log file
-    with open(LOG_FILE, 'w') as f:
+    with open(paths.LOG_FILE, 'w') as f:
         json.dump(log_data, f, indent=4)
 
 def execute_for_env(env_name):
@@ -44,7 +38,7 @@ def execute_for_env(env_name):
         return
 
     # Ensure the data directory exists
-    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(paths.ENV_DATA_DIR, exist_ok=True)
 
     print(f"🚀 Processing: {env_name}...")
     reporter = OdooModuleReporter(env_name, data['url'], data['db'], data['user'], data['pass'])
@@ -62,7 +56,7 @@ def execute_for_env(env_name):
         # Unique file per odoo server
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
         filename = f"report_{env_name}.csv"
-        save_path = DATA_DIR / filename
+        save_path = paths.ENV_DATA_DIR / filename
         df.to_csv(save_path, index=False)
 
         # 4. Update Audit Log for current environment module details update
@@ -72,7 +66,7 @@ def execute_for_env(env_name):
             "rows_generated": len(df),
             "fetch_time_sec": round(fetch_time, 4),
             "process_time_sec": round(process_time, 4),
-            "file_saved": str(save_path.relative_to(BASE_DIR))
+            "file_saved": str(save_path.relative_to(paths.BASE_DIR))
         }
         update_audit_log(env_name, metrics)
         #module master update for any new modules to add to master
