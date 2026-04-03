@@ -3,9 +3,6 @@ from datetime import datetime
 from pathlib import Path
 from app.core import paths
 
-# BASE_DIR = Path(__file__).resolve().parent.parent.parent
-# MASTER_FILE = BASE_DIR / "data/module_master/module_master.csv"
-
 def update_module_master(new_data_df: pd.DataFrame):
     """Checks for new modules and appends them to the master list."""
     # Ensure columns exist in incoming data

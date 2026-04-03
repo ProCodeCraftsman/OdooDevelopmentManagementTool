@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 from datetime import datetime
-from app.core import paths, config_manager
+from app.core import paths, server_env_config_manager
 
 def parse_semver(v_str):
     """
@@ -18,34 +18,39 @@ def parse_semver(v_str):
 
 def calculate_release_action(source_v, target_v):
     """
-    Strict Release Management Action Logic.
-    Source: Higher Order (e.g., Dev=4) | Target: Next Lower Order (e.g., Test=3)
+    Directional Release Logic:
+    Source = Higher Order (e.g., Dev=4) | Target = Current (e.g., Test=3)
     """
     s_val = parse_semver(source_v)
     t_val = parse_semver(target_v)
 
-    # 1. Missing in Source check (Highest priority error)
+    # DEBUG: print(f"Comparing Source: {s_val} vs Target: {t_val}")
+
+    # Case 1: Target has a version, but Source is N/A
     if s_val is None and t_val is not None:
-        return "Error: Missing in Source"
+        return "Error (Missing in Source)"
     
-    # 2. Missing Module check (Current environment)
+    # Case 2: Target is missing the module entirely
     if t_val is None:
         return "Missing Module"
 
-    # 3. Semantic Comparison
+    # Case 3: Both have versions - Perform Semantic Comparison
     if s_val > t_val:
         return "Upgrade"
+    
     if s_val == t_val:
         return "No Action"
-    if t_val > s_val:
-        return "Error" # Downgrade or Regression
     
-    return "Unknown"
+    if t_val > s_val:
+        # Target is newer than Source (Regression/Manual change in Target)
+        return "Error (Downgrade)"
+    
+    return "Unknown State"
 
 def generate_comparison_report():
     """Generates the Master Comparison Report using directional environment flow."""
     paths.ensure_paths()
-    envs = config_manager.load_config()
+    envs = server_env_config_manager.load_config()
     
     # Load update logs for 'Sync Date' headers
     logs = {}
