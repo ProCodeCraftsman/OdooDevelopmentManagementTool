@@ -1,90 +1,108 @@
-Odoo Module Dependency Analyzer
+Odoo Module Dependency & Version Auditor
 
-A professional, modular tool designed to fetch Odoo module data and perform an expanded dependency analysis across multiple environments simultaneously. It captures network fetch times and local processing times separately to monitor performance.
+A professional release management tool designed to synchronize Odoo 17 module data across multiple environments and perform a Directional Version Comparison. This tool helps identify regressions, missing modules, and pending upgrades to ensure a smooth deployment lifecycle.
+🚀 Key Features
+
+    Multi-Env Sync: Simultaneous data extraction from Dev, Staging, DR, and Production.
+
+    Evergreen Module Master: An append-only registry that tracks every unique technical name ever discovered.
+
+    Semantic Versioning: Numeric component-wise comparison (e.g., 17.0.1.10 > 17.0.1.9).
+
+    Release Management Actions: Automatically calculates actions (Upgrade, No Action, Error) based on environment hierarchy.
+
+    Audit Logging: Tracks last_update timestamps and performance metrics in a centralized JSON log.
+
 📁 Project Structure
 
-    app/core/: Contains the core logic.
+Based on the current architecture:
+Plaintext
 
-        odoo_xmlprc_config.py: The engine. Handles authentication, XML-RPC calls, and the Pandas merger logic.
-
-        config_manager.py: The registry manager. Handles reading and writing server credentials in environments.json.
-
-        get_env_module_data.py: The execution layer. Coordinates fetching and saving to the correct directory.
-
-    data/env_data/: The destination for all generated CSV reports.
-
-    environments.json: The central secure registry for all your Odoo server credentials.
-
-    requirements.txt: Lists necessary libraries (pandas, python-dotenv).
+Odoo Module Dependency Analyzer/
+├── app/
+│   └── core/
+│       ├── odoo_xmlprc_config.py      # The XML-RPC & Pandas engine
+│       ├── server_env_config_manager.py # Registry manager for environments.json
+│       ├── get_env_module_data.py     # Main fetcher & sync execution layer
+│       ├── module_master.py           # Logic for evergreen module tracking
+│       ├── comparison_engine.py       # Cross-environment audit & action logic
+│       └── paths.py                    # Centralized path & directory management
+├── data/
+│   ├── env_data/                      # Individual server CSVs & update_log.json
+│   ├── module_master/                 # module_master.csv (The source of truth)
+│   └── report/                        # Final comparison_report.csv
+├── environments.json                  # Secure server credentials & order config
+├── requirements.txt                   # pandas, python-dotenv
+└── .gitignore                         # Protects credentials and local data
 
 🛠️ Initial Setup
-
-    Create a Virtual Environment:
-    Bash
-
-    python3 -m venv venv
-
-    Activate the Environment:
-
-        Mac/Linux: source venv/bin/activate
-
-        Windows: .\venv\Scripts\activate
-
-    Install Dependencies:
-    Bash
-
-    pip install -r requirements.txt
-
-    Configure Environments:
-    The system no longer uses .env. Instead, populate your environments.json in the root folder with your server details:
-    JSON
-
-    {
-      "DEVELOPMENT": {
-        "url": "https://dev-url.com",
-        "db": "DB_NAME",
-        "user": "email@gpsrenewables.com",
-        "pass": "your_api_key"
-      }
-    }
-
-🚀 Execution
-
-To run the extraction, always execute from the root directory using the module flag (-m). This ensures all internal paths and imports resolve correctly.
-
-To run for ALL environments:
+1. Environment Preparation
 Bash
 
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Windows: .\venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+2. Configure environments.json
+
+Populate your environments.json in the root folder. The order parameter determines the comparison direction (Higher Order → Lower Order).
+JSON
+
+{
+  "DEVELOPMENT": {
+    "order": 4,
+    "url": "https://dev-odoo.com",
+    "db": "DB_DEV",
+    "user": "admin@company.com",
+    "pass": "api-key"
+  },
+  "PRODUCTION": {
+    "order": 1,
+    "url": "https://prod-odoo.com",
+    "db": "DB_PROD",
+    "user": "admin@company.com",
+    "pass": "api-key"
+  }
+}
+
+🚀 Execution Workflow
+Step 1: Sync Data
+
+Fetches the latest state from Odoo and updates the Module Master.
+Bash
+
+# Sync all environments
 python3 -m app.core.get_env_module_data --env all
 
-To run for a SPECIFIC environment:
-Bash
-
+# Sync specific environment
 python3 -m app.core.get_env_module_data --env DEVELOPMENT
 
-🔑 Critical Information & Security
+Step 2: Generate Comparison Report
 
-    [!IMPORTANT]
-    API Key Security
-    Never commit environments.json to version control (Git). This file contains plain-text credentials. Ensure it is listed in your .gitignore.
+Analyzes versions across the pipeline and assigns release actions.
+Bash
 
-    Data Exports: All files are automatically saved to data/env_data/ with a timestamp (YYYYMMDD_HHMM) to prevent overwriting previous audits.
+python3 -m app.core.comparison_engine
 
-    Performance Tracking: The console output will show you Fetch Time (Odoo server latency) vs. Process Time (Pandas local overhead). This helps identify if a delay is due to the network or the amount of data.
+Output saved to: data/report/comparison_report.csv
+⚖️ Release Management Logic
 
-    Dependency Expansion: The report uses a "Left Join" logic. If a module has 5 dependencies, you will see 5 rows for that module. If a module has 0 dependencies, it will show as 1 row with None values.
+The Action status is calculated by comparing a Source (Higher Order) to a Target (Next Lower Order):
+Status	Condition
+Upgrade	Source Version > Target Version (Ready for release)
+No Action	Source Version == Target Version (Synced)
+Error (Downgrade)	Target Version > Source Version (Regression/Manual Change)
+Error (Missing in Source)	Module exists in Target but is missing in the Source environment
+Missing Module	Module exists in Master but is missing in the Target environment
+🔑 Security & Maintenance
 
-    Odoo 17 Compatibility: This tool is optimized for Odoo 17’s XML-RPC structure and handles One2Many dependency relationships efficiently.
+    Credential Safety: environments.json contains sensitive API keys. Never commit this file to Git.
 
-⚙️ Managing Configurations
+    Path Integrity: All file operations are handled by paths.py. Do not move files manually between data subfolders.
 
-To add or remove environments via the Python terminal:
-Python
+    Module Master: The module_master.csv is the anchor for the entire system. If you need to reset the tracker, delete this file and re-sync all environments.
 
-from app.core import config_manager
-
-# Add a new environment
-config_manager.add_env("PRODUCTION", "https://odoo.com", "DB_NAME", "user", "pass")
-
-# List current environments
-print(config_manager.list_envs())
+    Performance: Performance metrics (Fetch vs. Process time) are recorded in data/env_data/server_env_data_update_log.json.
