@@ -329,19 +329,19 @@ Alembic Migration Guidelines
 
 ---
 
-### Phase 6: API Layer
+### Phase 6: API Layer ✅ COMPLETED
 **Objective**: Build FastAPI endpoints for frontend consumption.
 
 **Tasks**:
-- [ ] Create `backend/app/api/deps.py` - JWT dependency injection
-- [ ] Create `backend/app/schemas/auth.py` - Token request/response schemas
-- [ ] Create `backend/app/schemas/sync.py` - Sync request/response schemas
-- [ ] Create `backend/app/schemas/report.py` - Report schemas
-- [ ] Create `backend/app/api/v1/auth.py` - POST `/api/v1/auth/token`
-- [ ] Create `backend/app/api/v1/environments.py` - CRUD for environments
-- [ ] Create `backend/app/api/v1/sync.py` - POST `/api/v1/sync/{env_name}`, GET `/api/v1/sync/{job_id}`
-- [ ] Create `backend/app/api/v1/reports.py` - GET `/api/v1/reports/comparison`
-- [ ] Register all routers in `backend/app/main.py`
+- [x] Create `backend/app/api/deps.py` - JWT dependency injection
+- [x] Create `backend/app/schemas/auth.py` - Token request/response schemas
+- [x] Create `backend/app/schemas/sync.py` - Sync request/response schemas
+- [x] Create `backend/app/schemas/report.py` - Report schemas
+- [x] Create `backend/app/api/v1/auth.py` - POST `/api/v1/auth/token`
+- [x] Create `backend/app/api/v1/environments.py` - CRUD for environments
+- [x] Create `backend/app/api/v1/sync.py` - POST `/api/v1/sync/{env_name}`, GET `/api/v1/sync/{job_id}`
+- [x] Create `backend/app/api/v1/reports.py` - GET `/api/v1/reports/comparison`
+- [x] Register all routers in `backend/app/main.py`
 - [ ] Write integration tests for API endpoints
 
 **Verification**: Start server with `uvicorn app.main:app --reload` and test endpoints via Swagger UI.
