@@ -1,0 +1,26 @@
+{
+    "DEVELOPMENT": {
+        "status": "Success",
+        "last_update": "2026-04-03 20:33:09",
+        "rows_generated": 1418,
+        "fetch_time_sec": 0.8224,
+        "process_time_sec": 0.0183,
+        "file_saved": "data/env_data/report_DEVELOPMENT.csv"
+    },
+    "STAGING": {
+        "status": "Success",
+        "last_update": "2026-04-03 20:33:11",
+        "rows_generated": 1373,
+        "fetch_time_sec": 1.0439,
+        "process_time_sec": 0.0092,
+        "file_saved": "data/env_data/report_STAGING.csv"
+    },
+    "DR": {
+        "status": "Success",
+        "last_update": "2026-04-03 20:33:12",
+        "rows_generated": 1354,
+        "fetch_time_sec": 0.7952,
+        "process_time_sec": 0.0062,
+        "file_saved": "data/env_data/report_DR.csv"
+    }
+}
