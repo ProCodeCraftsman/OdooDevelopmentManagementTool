@@ -10,6 +10,10 @@ if config.config_file_name is not None:
 
 from app.core.database import engine
 from app.models.base import Base
+from app.models.user import User
+from app.models.environment import Environment
+from app.models.module import Module
+from app.models.sync_record import SyncRecord
 
 target_metadata = Base.metadata
 
