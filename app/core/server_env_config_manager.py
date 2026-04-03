@@ -1,16 +1,15 @@
 import json
 import os
-
-CONFIG_FILE = "environments.json"
+from app.core import paths
 
 def load_config():
-    if not os.path.exists(CONFIG_FILE):
+    if not os.path.exists(paths.CONFIG_FILE):
         return {}
-    with open(CONFIG_FILE, 'r') as f:
+    with open(paths.CONFIG_FILE, 'r') as f:
         return json.load(f)
 
 def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
+    with open(paths.CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=4)
 
 def add_env(order,environment_category,name, url, db, user, password):

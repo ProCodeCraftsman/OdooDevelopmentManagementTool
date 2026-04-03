@@ -48,29 +48,25 @@ def calculate_release_action(source_v, target_v):
     return "Unknown State"
 
 def generate_comparison_report():
-    """Generates the Master Comparison Report using directional environment flow."""
     paths.ensure_paths()
     envs = server_env_config_manager.load_config()
     
-    # Load update logs for 'Sync Date' headers
+    # Load metadata for Status headers
     logs = {}
     if paths.LOG_FILE.exists():
         with open(paths.LOG_FILE, 'r') as f:
             logs = json.load(f)
 
-    # Validate Master File exists
+    # Anchor the report to the Unique Module Master
     if not paths.MASTER_FILE.exists():
-        print("❌ Error: module_master.csv missing. Run sync first.")
+        print("❌ Sync required: module_master.csv not found.")
         return
 
-    # STARTING POINT: Use Module Master for unique names only
-    # This guarantees no historical modules are dropped
     master_df = pd.read_csv(paths.MASTER_FILE)
     report_df = master_df[['name', 'shortdesc']].copy()
     report_df.rename(columns={'name': 'Technical Name', 'shortdesc': 'Module Name'}, inplace=True)
 
-    # SORT ENVIRONMENTS: By order parameter (Source to Target flow)
-    # Highest Order (Dev: 4) -> (Test: 3) -> (Staging: 2) -> (Prod: 1)
+    # Sort environments: Source (High Order) to Target (Low Order)
     sorted_envs = sorted(envs.items(), key=lambda x: x[1].get('order', 0), reverse=True)
     
     prev_env_name = None
@@ -79,48 +75,43 @@ def generate_comparison_report():
         env_file = paths.ENV_DATA_DIR / f"report_{name}.csv"
         last_update = logs.get(name, {}).get('last_update', 'N/A')
         
-        # 1. Load and DEDUPLICATE current environment data
         if env_file.exists():
-            env_raw = pd.read_csv(env_file)
-            # Ensure unique module entries per file
-            env_clean = env_raw[['name', 'state', 'installed_version']].drop_duplicates('name')
+            # Load and deduplicate current environment data
+            env_df = pd.read_csv(env_file)[['name', 'state', 'installed_version']].drop_duplicates('name')
             
-            # 2. Define dynamic column names with sync date in Status
+            # Define Headers
             status_col = f"{name}_Status ({last_update})"
             ver_col = f"{name}_Version"
             action_col = f"{name}_Action"
 
-            env_clean.rename(columns={
-                'state': status_col,
-                'installed_version': ver_col
-            }, inplace=True)
-
-            # 3. Merge environment data into Master Report
-            report_df = pd.merge(report_df, env_clean, left_on='Technical Name', right_on='name', how='left')
+            env_df.rename(columns={'state': status_col, 'installed_version': ver_col}, inplace=True)
+            
+            # Merge into master
+            report_df = pd.merge(report_df, env_df, left_on='Technical Name', right_on='name', how='left')
             report_df.drop(columns=['name'], inplace=True)
 
-            # 4. Fill Nulls for status/version
+            # Standardize missing data
             report_df[status_col] = report_df[status_col].fillna("Missing Module")
             report_df[ver_col] = report_df[ver_col].fillna("N/A")
 
-            # 5. ACTION LOGIC: Compare against the previous (Source) environment
+            # --- Logic Change: Only add Action column if a 'Source' exists ---
             if prev_env_name:
                 prev_ver_col = f"{prev_env_name}_Version"
-                # Debugging: print(f"Comparing {prev_env_name} vs {name}")
                 report_df[action_col] = report_df.apply(
                     lambda row: calculate_release_action(row[prev_ver_col], row[ver_col]), axis=1
                 )
             else:
-                # The Highest Order Environment (Source of all) has no comparison
-                report_df[action_col] = "SOURCE"
+                # This is the Highest Order Environment (Source). 
+                # Per instructions: Action column NOT required.
+                pass 
 
             prev_env_name = name
         else:
-            print(f"⚠️ Warning: Data file missing for {name}. Report may be incomplete.")
+            print(f"⚠️ Warning: Missing data for {name}. Ensure sync is successful.")
 
-    # Final Save
+    # Save final report to the dedicated Report folder
     report_df.to_csv(paths.COMPARISON_REPORT, index=False)
-    print(f"🚀 Master Comparison Report Generated: {paths.COMPARISON_REPORT}")
+    print(f"✅ Comparison Report Generated at: {paths.COMPARISON_REPORT}")
 
 if __name__ == "__main__":
     generate_comparison_report()

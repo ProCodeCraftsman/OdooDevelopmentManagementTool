@@ -12,9 +12,10 @@ REPORT_DIR = DATA_DIR / "report"
 
 
 # Files
-LOG_FILE = ENV_DATA_DIR / "update_log.json"
+LOG_FILE = ENV_DATA_DIR / "server_env_data_update_log.json"
 MASTER_FILE = MASTER_DIR / "module_master.csv"
 COMPARISON_REPORT = REPORT_DIR / "comparison_report.csv"
+CONFIG_FILE=BASE_DIR / "environments.json"
 
 def ensure_paths():
     """Utility to ensure all required directories exist."""
