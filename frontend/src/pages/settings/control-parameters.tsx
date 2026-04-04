@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, RotateCcw, Archive, AlertTriangle, Pencil } from "lucide-react";
+import { Plus, RotateCcw, Archive, AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -34,9 +34,14 @@ import {
   useArchiveControlParameter,
   useRestoreControlParameter,
   useUpdateControlParameter,
+  useControlParameterRules,
+  useCreateControlParameterRule,
+  useUpdateControlParameterRule,
+  useDeleteControlParameterRule,
+  useToggleControlParameterRule,
   type ControlParameterType,
 } from "@/hooks/useControlParameters";
-import type { ControlParameterWithUsage } from "@/api/control-parameters";
+import type { ControlParameterWithUsage, ControlParameterRule } from "@/api/control-parameters";
 
 const requestTypeSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
@@ -77,6 +82,7 @@ const TAB_CONFIGS: TabConfig[] = [
   { key: "request-states", label: "Request States", schema: requestStateSchema },
   { key: "priorities", label: "Priorities", schema: prioritySchema },
   { key: "functional-categories", label: "Categories", schema: categorySchema },
+  { key: "rules", label: "Rules", schema: categorySchema },
 ];
 
 function ParameterRow({
@@ -794,6 +800,268 @@ function TableContent({
   );
 }
 
+function RulesTab() {
+  const { data: rules, isLoading, error } = useControlParameterRules();
+  const createMutation = useCreateControlParameterRule();
+  const updateMutation = useUpdateControlParameterRule();
+  const deleteMutation = useDeleteControlParameterRule();
+  const toggleMutation = useToggleControlParameterRule();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<ControlParameterRule | null>(null);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+
+  const form = useForm<{
+    request_state_name: string;
+    allowed_type_categories: string;
+    allowed_priorities: string;
+    allowed_functional_categories: string;
+  }>({
+    defaultValues: {
+      request_state_name: "",
+      allowed_type_categories: "ALL",
+      allowed_priorities: "ALL",
+      allowed_functional_categories: "ALL",
+    },
+  });
+
+  const editForm = useForm<{
+    request_state_name: string;
+    allowed_type_categories: string;
+    allowed_priorities: string;
+    allowed_functional_categories: string;
+  }>({
+    defaultValues: {
+      request_state_name: "",
+      allowed_type_categories: "ALL",
+      allowed_priorities: "ALL",
+      allowed_functional_categories: "ALL",
+    },
+  });
+
+  const onSubmit = async (data: { request_state_name: string; allowed_type_categories: string; allowed_priorities: string; allowed_functional_categories: string }) => {
+    try {
+      await createMutation.mutateAsync(data);
+      setIsSheetOpen(false);
+      form.reset();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const onEditSubmit = async (data: { request_state_name: string; allowed_type_categories: string; allowed_priorities: string; allowed_functional_categories: string }) => {
+    if (!editingRule) return;
+    try {
+      await updateMutation.mutateAsync({ id: editingRule.id, data });
+      setIsEditSheetOpen(false);
+      setEditingRule(null);
+      editForm.reset();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const handleEdit = (rule: ControlParameterRule) => {
+    setEditingRule(rule);
+    editForm.reset({
+      request_state_name: rule.request_state_name,
+      allowed_type_categories: rule.allowed_type_categories,
+      allowed_priorities: rule.allowed_priorities,
+      allowed_functional_categories: rule.allowed_functional_categories,
+    });
+    setIsEditSheetOpen(true);
+  };
+
+  return (
+    <TabsContent value="rules" className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle>Control Parameter Rules</CardTitle>
+            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+              <SheetTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Rule
+                </Button>
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader>
+                  <SheetTitle>Add Rule</SheetTitle>
+                  <SheetDescription>Create a new control parameter rule</SheetDescription>
+                </SheetHeader>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="request_state_name">Request State</Label>
+                    <Input id="request_state_name" {...form.register("request_state_name", { required: true })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="allowed_type_categories">Allowed Type Categories</Label>
+                    <select
+                      id="allowed_type_categories"
+                      {...form.register("allowed_type_categories")}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="ALL">ALL</option>
+                      <option value="Development">Development</option>
+                      <option value="Non Development">Non Development</option>
+                      <option value="Development,Non Development">Development, Non Development</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="allowed_priorities">Allowed Priorities</Label>
+                    <select
+                      id="allowed_priorities"
+                      {...form.register("allowed_priorities")}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="ALL">ALL</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="allowed_functional_categories">Allowed Functional Categories</Label>
+                    <select
+                      id="allowed_functional_categories"
+                      {...form.register("allowed_functional_categories")}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="ALL">ALL</option>
+                    </select>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+                    {createMutation.isPending ? "Creating..." : "Create"}
+                  </Button>
+                </form>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="text-center py-8 text-red-500">Error loading rules</div>
+          ) : !rules?.length ? (
+            <div className="text-center py-8 text-muted-foreground">No rules found</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>State</TableHead>
+                    <TableHead className="hidden md:table-cell">Type Categories</TableHead>
+                    <TableHead className="hidden lg:table-cell">Priorities</TableHead>
+                    <TableHead className="hidden lg:table-cell">Functional Categories</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rules.map((rule) => (
+                    <TableRow key={rule.id}>
+                      <TableCell>{rule.request_state_name}</TableCell>
+                      <TableCell className="hidden md:table-cell">{rule.allowed_type_categories}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{rule.allowed_priorities}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{rule.allowed_functional_categories}</TableCell>
+                      <TableCell>
+                        <Badge variant={rule.is_active ? "default" : "secondary"}>
+                          {rule.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(rule)} title="Edit">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => toggleMutation.mutate(rule.id)}
+                            title={rule.is_active ? "Disable" : "Enable"}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(rule.id)} title="Delete">
+                            <Archive className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit Rule</SheetTitle>
+            <SheetDescription>Update control parameter rule</SheetDescription>
+          </SheetHeader>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
+            <div className="space-y-2">
+              <Label htmlFor="edit-request_state_name">Request State</Label>
+              <Input id="edit-request_state_name" {...editForm.register("request_state_name", { required: true })} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-allowed_type_categories">Allowed Type Categories</Label>
+              <select
+                id="edit-allowed_type_categories"
+                {...editForm.register("allowed_type_categories")}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="ALL">ALL</option>
+                <option value="Development">Development</option>
+                <option value="Non Development">Non Development</option>
+                <option value="Development,Non Development">Development, Non Development</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-allowed_priorities">Allowed Priorities</Label>
+              <select
+                id="edit-allowed_priorities"
+                {...editForm.register("allowed_priorities")}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="ALL">ALL</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-allowed_functional_categories">Allowed Functional Categories</Label>
+              <select
+                id="edit-allowed_functional_categories"
+                {...editForm.register("allowed_functional_categories")}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="ALL">ALL</option>
+              </select>
+            </div>
+            <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </form>
+        </SheetContent>
+      </Sheet>
+    </TabsContent>
+  );
+}
+
 export function SettingsControlParametersPage() {
   const [showArchived, setShowArchived] = useState(false);
 
@@ -811,7 +1079,7 @@ export function SettingsControlParametersPage() {
       </div>
 
       <Tabs defaultValue="request-types" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           {TAB_CONFIGS.map((tab) => (
             <TabsTrigger key={tab.key} value={tab.key}>
               {tab.label}
@@ -823,6 +1091,7 @@ export function SettingsControlParametersPage() {
         <RequestStateTab showArchived={showArchived} />
         <PriorityTab showArchived={showArchived} />
         <CategoryTab showArchived={showArchived} />
+        <RulesTab />
       </Tabs>
     </div>
   );

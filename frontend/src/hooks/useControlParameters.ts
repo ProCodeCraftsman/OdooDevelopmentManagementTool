@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { controlParametersApi, type ControlParameterCreate, type ControlParameterUpdate } from "@/api/control-parameters";
+import { controlParametersApi, controlParameterRulesApi, type ControlParameterCreate, type ControlParameterUpdate } from "@/api/control-parameters";
 import { toast } from "sonner";
 
 export const controlParamKeys = {
   all: ["control-params"] as const,
   list: (paramType: string) => [...controlParamKeys.all, "list", paramType] as const,
+  rules: ["control-params", "rules"] as const,
 };
 
 export type ControlParameterType = 
@@ -80,6 +81,75 @@ export function useUpdateControlParameter() {
     },
     onError: (error: { response?: { data?: { detail?: string } } }) => {
       toast.error(error.response?.data?.detail || "Failed to update parameter");
+    },
+  });
+}
+
+// Control Parameter Rules hooks
+export function useControlParameterRules() {
+  return useQuery({
+    queryKey: controlParamKeys.rules,
+    queryFn: () => controlParameterRulesApi.list(),
+  });
+}
+
+export function useCreateControlParameterRule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: controlParameterRulesApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: controlParamKeys.rules });
+      toast.success("Rule created successfully");
+    },
+    onError: (error: { response?: { data?: { detail?: string } } }) => {
+      toast.error(error.response?.data?.detail || "Failed to create rule");
+    },
+  });
+}
+
+export function useUpdateControlParameterRule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof controlParameterRulesApi.update>[1] }) =>
+      controlParameterRulesApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: controlParamKeys.rules });
+      toast.success("Rule updated successfully");
+    },
+    onError: (error: { response?: { data?: { detail?: string } } }) => {
+      toast.error(error.response?.data?.detail || "Failed to update rule");
+    },
+  });
+}
+
+export function useDeleteControlParameterRule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: controlParameterRulesApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: controlParamKeys.rules });
+      toast.success("Rule deleted successfully");
+    },
+    onError: (error: { response?: { data?: { detail?: string } } }) => {
+      toast.error(error.response?.data?.detail || "Failed to delete rule");
+    },
+  });
+}
+
+export function useToggleControlParameterRule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: controlParameterRulesApi.toggle,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: controlParamKeys.rules });
+      toast.success("Rule toggled successfully");
+    },
+    onError: (error: { response?: { data?: { detail?: string } } }) => {
+      toast.error(error.response?.data?.detail || "Failed to toggle rule");
     },
   });
 }

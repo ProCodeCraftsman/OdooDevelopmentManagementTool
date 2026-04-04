@@ -76,3 +76,57 @@ export const controlParametersApi = {
     return response.data;
   },
 };
+
+// Control Parameter Rules API
+export interface ControlParameterRule {
+  id: number;
+  request_state_name: string;
+  allowed_type_categories: string;
+  allowed_priorities: string;
+  allowed_functional_categories: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ControlParameterRuleCreate {
+  request_state_name: string;
+  allowed_type_categories?: string;
+  allowed_priorities?: string;
+  allowed_functional_categories?: string;
+  is_active?: boolean;
+}
+
+export interface ControlParameterRuleUpdate {
+  request_state_name?: string;
+  allowed_type_categories?: string;
+  allowed_priorities?: string;
+  allowed_functional_categories?: string;
+  is_active?: boolean;
+}
+
+export const controlParameterRulesApi = {
+  list: async (): Promise<ControlParameterRule[]> => {
+    const response = await api.get("/development-requests/control-parameters/rules");
+    return response.data.rules;
+  },
+
+  create: async (data: ControlParameterRuleCreate): Promise<ControlParameterRule> => {
+    const response = await api.post("/development-requests/control-parameters/rules", data);
+    return response.data;
+  },
+
+  update: async (id: number, data: ControlParameterRuleUpdate): Promise<ControlParameterRule> => {
+    const response = await api.put(`/development-requests/control-parameters/rules/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/development-requests/control-parameters/rules/${id}`);
+  },
+
+  toggle: async (id: number): Promise<ControlParameterRule> => {
+    const response = await api.post(`/development-requests/control-parameters/rules/${id}/toggle`);
+    return response.data;
+  },
+};
