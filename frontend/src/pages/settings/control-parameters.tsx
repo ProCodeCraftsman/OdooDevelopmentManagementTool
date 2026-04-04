@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, RotateCcw, Archive, AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Archive, AlertTriangle, Pencil } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -205,7 +205,6 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
     editForm.reset({
       name: item.name,
       description: item.description || "",
-      category: item.category || "",
     });
     setIsEditSheetOpen(true);
   };
@@ -360,7 +359,6 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
     editForm.reset({
       name: item.name,
       description: item.description || "",
-      category: item.category || "open",
     });
     setIsEditSheetOpen(true);
   };
@@ -510,7 +508,6 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
     editForm.reset({
       name: item.name,
       description: item.description || "",
-      level: item.level || 3,
     });
     setIsEditSheetOpen(true);
   };

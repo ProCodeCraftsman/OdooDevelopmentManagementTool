@@ -12,7 +12,8 @@ export type ControlParameterType =
   | "request-types" 
   | "request-states" 
   | "functional-categories" 
-  | "priorities";
+  | "priorities"
+  | "rules";
 
 export function useControlParameterList(paramType: ControlParameterType) {
   return useQuery({
