@@ -130,6 +130,14 @@ class DevelopmentRequestListResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PaginatedDevelopmentRequestListResponse(BaseModel):
+    items: List[DevelopmentRequestListResponse]
+    total: int
+    page: int
+    limit: int
+    pages: int
+
+
 class DevelopmentRequestResponse(DevelopmentRequestListResponse):
     comments: Optional[str]
     uat_request_id: Optional[str]
