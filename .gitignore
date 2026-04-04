@@ -19,6 +19,7 @@ env/
 # Environment variables
 .env
 .env.local
+.env.*
 
 # IDE
 .vscode/
@@ -30,7 +31,57 @@ env/
 # macOS
 .DS_Store
 
+# Backend
+backend/instance/
+backend/*.log
+backend/*.log.*
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+backend/dist/
+backend/build/
+backend/*.egg-info/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/dist/
+
+# Logs
+*.log
+*.log.*
+logs/
+server.log
+backend.log
+frontend.log
+playwright_*.log
+integration_test.log
+
+# Playwright
+playwright-report/
+test-results/
+/.playwright/
+
+# OpenCode
+.opencode/
+
+# Planning docs (can be regenerated)
+backend/plan.md
+backend/PHASE*.md
+
 # Legacy data (do not track)
 Legacy/data/
 Legacy/*.csv
 Legacy/environments.json
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Summary/planning docs
+summary of actions taken/
