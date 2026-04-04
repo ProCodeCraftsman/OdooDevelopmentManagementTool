@@ -6,6 +6,10 @@ export const authApi = {
     const response = await api.post<TokenResponse>("/auth/token", data);
     return response.data;
   },
+  getMe: async (): Promise<User> => {
+    const response = await api.get<User>("/users/me");
+    return response.data;
+  },
   register: async (data: UserCreate): Promise<User> => {
     const response = await api.post<User>("/auth/register", data);
     return response.data;
