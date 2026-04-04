@@ -1,101 +1,187 @@
 # AGENTS.md - Odoo Release Management Backend
 ## Project Overview
-**Odoo Module Dependency & Version Auditor** - A stateful, secure, and queryable release 
-management engine that synchronizes Odoo 17 module data across multiple environments.
+**Odoo Module Dependency & Version Auditor** - A full-stack application for synchronizing Odoo 17 module data across multiple environments, featuring a React frontend with RBAC.
 
-**Current State**: CSV-based scripts (Phase 1 migration planned)
-**Target State**: Layered backend (API → Service → Repository → PostgreSQL)
+**Current State**: FastAPI backend with React frontend, PostgreSQL database, Development Request module
+**Architecture**: React + FastAPI + PostgreSQL (monorepo with frontend/ and backend/)
 ---
-## current Project Structure for reference only
+
+## Project Structure
+
 ```
 .
-├── app/
-│   ├── __init__.py
-│   └── core/
-│       ├── paths.py                    # Centralized path management
-│       ├── odoo_xmlprc_config.py      # XML-RPC Odoo client
-│       ├── server_env_config_manager.py # Environment registry
-│       ├── module_master.py           # Evergreen module tracking
-│       ├── comparison_engine.py        # Version comparison logic
-│       └── get_env_module_data.py      # Main sync orchestrator
-├── data/                              # CSV outputs
-│   ├── env_data/                      # Per-environment CSVs + logs
-│   ├── module_master/                 # module_master.csv
-│   └── report/                        # comparison_report.csv
-├── environments.json                  # Server credentials (git-ignored)
-└── requirements.txt
+├── backend/                    # FastAPI Python backend
+│   ├── alembic/
+│   │   └── versions/          # Database migrations
+│   ├── app/
+│   │   ├── api/v1/            # FastAPI routes
+│   │   │   ├── auth.py
+│   │   │   ├── development_requests.py
+│   │   │   ├── environments.py
+│   │   │   ├── reports.py
+│   │   │   ├── roles.py
+│   │   │   ├── sync.py
+│   │   │   └── users.py
+│   │   ├── core/              # Config, security, database
+│   │   │   ├── config.py
+│   │   │   ├── database.py
+│   │   │   ├── security_matrix.py
+│   │   │   └── deps.py
+│   │   ├── models/            # SQLAlchemy models
+│   │   │   ├── base.py
+│   │   │   ├── user.py
+│   │   │   ├── role.py
+│   │   │   ├── environment.py
+│   │   │   ├── module.py
+│   │   │   ├── sync_record.py
+│   │   │   ├── development_request.py
+│   │   │   └── control_parameters/
+│   │   │       ├── request_state.py
+│   │   │       ├── request_type.py
+│   │   │       ├── priority.py
+│   │   │       └── functional_category.py
+│   │   ├── repositories/      # Database CRUD operations
+│   │   │   ├── base.py
+│   │   │   ├── user.py
+│   │   │   ├── role.py
+│   │   │   ├── environment.py
+│   │   │   ├── module.py
+│   │   │   ├── sync_record.py
+│   │   │   └── development_request.py
+│   │   ├── schemas/           # Pydantic validation models
+│   │   │   ├── auth.py
+│   │   │   ├── user.py
+│   │   │   ├── role.py
+│   │   │   ├── environment.py
+│   │   │   ├── sync.py
+│   │   │   ├── report.py
+│   │   │   └── development_request.py
+│   │   ├── services/          # Business logic
+│   │   │   ├── auth_service.py
+│   │   │   ├── encryption.py
+│   │   │   ├── odoo_client.py
+│   │   │   ├── comparer.py
+│   │   │   ├── sync_service.py
+│   │   │   └── development_request_service.py
+│   │   └── main.py
+│   ├── scripts/               # Data migration scripts
+│   ├── tests/                 # Unit and integration tests
+│   │   ├── conftest.py
+│   │   ├── test_api/
+│   │   ├── test_services/
+│   │   ├── test_core/
+│   │   └── test_repositories/
+│   ├── docker-compose.yml
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/                  # React TypeScript frontend
+│   ├── src/
+│   │   ├── api/               # API client functions
+│   │   ├── components/        # Reusable UI components
+│   │   │   ├── ui/            # Base UI components
+│   │   │   ├── layout/        # Layout components
+│   │   │   └── sync/          # Sync-related components
+│   │   ├── hooks/             # React Query hooks
+│   │   ├── pages/             # Page components
+│   │   ├── store/             # Zustand stores
+│   │   ├── types/             # TypeScript types
+│   │   └── lib/                # Utilities
+│   ├── package.json
+│   ├── tailwind.config.js
+│   └── vite.config.ts
+├── venv/                      # Python virtual environment
+└── .gitignore
 ```
+
 ---
-**Architecture**: Layered Service Architecture
-- API Layer (FastAPI) → Service Layer → Repository Layer → PostgreSQL
----
-## Project Structure
-backend/
-├── alembic/                    # Database migrations
-├── app/
-│   ├── api/v1/                 # FastAPI routes
-│   ├── core/                   # Config, security, database
-│   ├── models/                 # SQLAlchemy models
-│   ├── repositories/           # Database CRUD operations
-│   ├── schemas/                # Pydantic validation models
-│   └── services/               # Business logic
-├── tests/                       # Unit and integration tests
-├── docker-compose.yml          # PostgreSQL + App
-├── Dockerfile
-└── requirements.txt
----
+
 ## Build/Lint/Test Commands
-### Setup
+
+### Backend Setup
 ```bash
-# Create virtual environment
+cd backend
 python3 -m venv venv && source venv/bin/activate
-# Install dependencies
 pip install -r requirements.txt
-# Docker Compose (PostgreSQL)
 docker-compose up -d postgres
-Running the Application
-# Development server
+```
+
+### Backend Running
+```bash
+cd backend
+source venv/bin/activate
 uvicorn app.main:app --reload --port 8000
-# Production
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-Database Migrations (Alembic)
-# Create new migration
+```
+
+### Backend Database Migrations
+```bash
+cd backend
 alembic revision --autogenerate -m "Description"
-# Run migrations
 alembic upgrade head
-# Rollback
 alembic downgrade -1
-Testing
-# Run all tests
-pytest
-# Run with coverage
-pytest --cov=app --cov-report=term-missing
-# Run specific test file
-pytest tests/test_services/test_comparer.py
-# Run specific test
-pytest tests/test_services/test_comparer.py::test_parse_semver -v
+```
+
+### Backend Testing (always use nohup for long tests)
+```bash
+cd backend
+nohup pytest -v &
+nohup pytest --cov=app --cov-report=term-missing &
+nohup pytest tests/test_services/test_comparer.py -v &
+```
+
+### Frontend Setup
+```bash
+cd frontend
+npm install
+```
+
+### Frontend Running
+```bash
+cd frontend
+npm run dev
+```
+
+### Frontend Testing
+```bash
+cd frontend
+nohup npm run build &
+nohup npm run lint &
+nohup npx vitest &
+```
+
 ---
-Code Style Guidelines
-Naming Conventions
-Type	Convention
-Classes	PascalCase
-Functions/Variables	snake_case
-Constants	UPPER_SNAKE
-Private Methods	_prefix
-Database Tables	snake_case
-Type Hints (Required)
-Use typing module for annotations:
+
+## Code Style Guidelines
+
+### Backend (Python)
+| Type | Convention |
+|------|------------|
+| Classes | PascalCase |
+| Functions/Variables | snake_case |
+| Constants | UPPER_SNAKE |
+| Private Methods | _prefix |
+| Database Tables | snake_case |
+
+### Frontend (TypeScript/React)
+| Type | Convention |
+|------|------------|
+| Components | PascalCase (.tsx) |
+| Hooks | camelCase with `use` prefix |
+| Functions/Variables | camelCase |
+| Constants | UPPER_SNAKE |
+| File naming | kebab-case.ts(x) |
+
+### Type Hints (Backend - Required)
+```python
 from typing import Optional, List, Dict, Any
-def fetch_modules(env_id: int) -> List[Dict[str, Any]]:
-    ...
-Use SQLAlchemy 2.0 style for model columns:
-from sqlalchemy import String, Integer
 from sqlalchemy.orm import Mapped, mapped_column
+
 class Module(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True)
-    version: Mapped[Optional[int]] = mapped_column(nullable=True)
-Import Order
+```
+
+### Import Order (Backend)
+```python
 # 1. Standard library
 import uuid
 from datetime import datetime
@@ -106,323 +192,228 @@ from sqlalchemy import select
 from pydantic import BaseModel
 # 3. Local application
 from app.core.database import get_db
-from app.models import Environment
-Docstrings (Google Style)
-def calculate_release_action(source: str, target: str) -> str:
-    """Calculate the release action based on version comparison.
-    Compares source version against target version to determine if an
-    upgrade is needed or if there's a regression.
-    Args:
-        source: Source version string (e.g., "17.0.1.10")
-        target: Target version string (e.g., "17.0.1.9")
-    Returns:
-        Action string: "Upgrade", "No Action", or "Error (Downgrade)"
-    """
-Error Handling
-# Use specific exception types
-try:
-    result = decrypt_password(encrypted)
-except cryptography.fernet.InvalidToken:
-    raise CredentialDecryptionError("Failed to decrypt password")
-# Log errors with context
-logger.error(f"Sync failed for environment {env_id}: {str(e)}", exc_info=True)
-Path Handling
-Always use pathlib.Path:
-from pathlib import Path
-# Good
-config_path = Path(__file__).parent / "config.json"
-# Avoid
-config_path = os.path.join(os.path.dirname(__file__), "config.json")
+```
+
 ---
-## Layered Architecture Rules
-### API Layer (app/api/)
-- Validate input using Pydantic schemas
-- Return HTTP responses (JSON)
-- Handle authentication via JWT dependencies
-- **NO business logic here**
-### Service Layer (app/services/)
-- Contains all business logic
-- Orchestrates repository calls
-- Handles version comparison, Odoo client, sync orchestration
-- Pure Python functions/classes
-### Repository Layer (app/repositories/)
-- Handles all database transactions
-- Uses INSERT ON CONFLICT for deduplication
-- Generic base class for CRUD operations
-- **NO business logic here**
-### Model Layer (app/models/)
-- SQLAlchemy declarative models
-- Database constraints (unique indexes, foreign keys)
-- No methods - only data structure
----
-Database Conventions
-Version Storage (SQL-Native Comparison)
-Store version as separate integer components for efficient SQL queries:
+
+## Backend Architecture
+
+### Layered Architecture Rules
+| Layer | Location | Responsibility |
+|-------|----------|-----------------|
+| API | app/api/v1/ | Validate input, return HTTP responses, JWT auth |
+| Service | app/services/ | Business logic, orchestration |
+| Repository | app/repositories/ | Database transactions, CRUD |
+| Model | app/models/ | SQLAlchemy declarative models |
+
+### Database Conventions
+```python
 class SyncRecord(Base):
     version_major: Mapped[int] = mapped_column(nullable=True)
     version_minor: Mapped[int] = mapped_column(nullable=True)
     version_patch: Mapped[int] = mapped_column(nullable=True)
     version_build: Mapped[int] = mapped_column(nullable=True)
-    version_string: Mapped[str] = mapped_column()  # Display only
-Task Registry (SyncRecord State Machine)
+    version_string: Mapped[str] = mapped_column()
+
 class SyncStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
-Constraints
-class Module(Base):
-    name: Mapped[str] = mapped_column(unique=True)  # Unique constraint
-    
-    __table_args__ = (
-        Index('ix_module_version_sort', 'version_major', 'version_minor', 
-              'version_patch', 'version_build'),
-    )
-Deduplication Pattern
-# Use ON CONFLICT for upserts
+```
+
+### Deduplication Pattern
+```python
 stmt = insert(Module).values(name=name, shortdesc=desc)
 stmt = stmt.on_conflict_do_nothing(index_elements=['name'])
 await db.execute(stmt)
+```
 
 ---
-Security
-Credential Handling
+
+## Security
+
+### Credential Handling
 - Odoo passwords encrypted at rest using Fernet
 - Master key from environment variable FERNET_KEY
-- Never log decrypted credentials
 - JWT tokens for API authentication
-JWT Authentication
-# All protected endpoints require:
+- Never log decrypted credentials
+
+### JWT Authentication
+```python
 from app.api.deps import get_current_user
+
 @router.post("/sync/{env_name}")
 def trigger_sync(env_name: str, current_user: User = Depends(get_current_user)):
     ...
-Environment Variables (Required)
+```
+
+### Environment Variables (Required)
+```
 DATABASE_URL=postgresql://user:pass@localhost:5432/odoo_auditor
 FERNET_KEY=<32-byte-base64-encoded-key>
 JWT_SECRET_KEY=<random-secret>
 JWT_ALGORITHM=HS256
 JWT_EXPIRATION_HOURS=24
+```
+
 ---
-Testing Guidelines
-Test Structure
+
+## Testing Guidelines
+
+### Backend Test Structure
+```
 tests/
 ├── conftest.py                 # Shared fixtures
-├── test_models/
-├── test_repositories/
+├── test_api/
+│   ├── test_auth.py
+│   ├── test_development_requests.py
+│   └── test_environments.py
 ├── test_services/
 │   ├── test_comparer.py
 │   └── test_odoo_client.py
-└── test_api/
-Fixtures Pattern
-# conftest.py
+├── test_core/
+│   └── test_security_matrix.py
+└── test_repositories/
+```
+
+### Backend Fixtures Pattern
+```python
 @pytest.fixture
 def db_session():
     # Create test database
     ...
+
 @pytest.fixture
 def sample_environment(db_session):
     return Environment(name="DEV", order=4, ...)
-# Usage in tests
+
 def test_version_comparison(db_session, sample_environment):
     assert calculate_release_action("17.0.1.10", "17.0.1.9") == "Upgrade"
-Test Naming
+```
+
+### Test Naming Convention
+```python
 def test_comparer_returns_upgrade_when_source_greater():
     ...
+
 def test_sync_record_transitions_to_running_on_start():
     ...
----
-## Legacy Code Migration
-Current CSV-based code will be preserved in `Legacy` folder during migration.
-Do not modify legacy code - it serves as reference until new system is verified.
----
-Alembic Migration Guidelines
-1. Structural changes: alembic revision --autogenerate -m "description"
-2. Data migrations: Separate migration files with ops.execute() for data transforms
-3. Never delete historical data - append-only design
-4. Test migrations on a copy of production data before deploying
+```
+
 ---
 
-## Migration Rules (Strict Enforcement)
-1. **Read-Only Zone**: The `Legacy` directory is strictly READ-ONLY. Never modify, delete, or move files in these folders.
+---
+
+## Alembic Migration Guidelines
+
+1. Structural changes: `alembic revision --autogenerate -m "description"`
+2. Data migrations: Separate migration files with `ops.execute()` for data transforms
+3. Never delete historical data - append-only design
+4. Test migrations on a copy of production data before deploying
+
+---
+
+## Plan Management
+
+All project plans MUST be stored in the centralized location `.opencode/plans/`.
+
+### Directory Structure
+```
+.opencode/plans/
+├── pending/      # Plans to be executed (check this FIRST)
+└── completed/    # Executed plans (NEVER re-execute without explicit user approval)
+```
+
+### Rules
+1. **Create new plans** in `.opencode/plans/pending/` with descriptive names
+2. **Check pending plans** at the start of each session
+3. **Move to completed** after execution: `mv .opencode/plans/pending/<plan>.md .opencode/plans/completed/`
+4. **Never re-execute** completed plans without explicit user approval
+5. **Document outcomes** in the plan before archiving (results, files created, tests run)
+
 ---
 
 ## Migration Phases & Tasks
 
-### Phase 1: Project Setup ✅ COMPLETED
-**Objective**: Create the backend directory structure and establish dependencies.
+### Phase 1-3: Foundation ✅ COMPLETED
+- Backend project setup with FastAPI, SQLAlchemy, Alembic
+- Database models (User, Role, Environment, Module, SyncRecord)
+- PostgreSQL configuration with migrations
+
+### Phase 4-6: Backend Layered Architecture ✅ COMPLETED
+- Repository layer with CRUD operations
+- Service layer with business logic
+- API layer with FastAPI endpoints
+- JWT authentication
+
+### Phase 7-8: Core Features ✅ COMPLETED
+- Background sync with Odoo XML-RPC
+- Version comparison engine
+- Reports generation
+
+### Phase 9: Development Request Module ✅ COMPLETED
+**Objective**: Add Development Request CRUD with RBAC
 
 **Tasks**:
-- [x] Create `backend/` directory
-- [x] Create `backend/requirements.txt` with all dependencies (fastapi, sqlalchemy, alembic, etc.)
-- [x] Create `backend/.env.example` with required environment variables template
-- [x] Create `backend/docker-compose.yml` for PostgreSQL + App services
-- [x] Create `backend/Dockerfile`
-- [x] Create `backend/app/__init__.py`
-- [x] Create `backend/app/main.py` with FastAPI app skeleton
-- [x] Verify Docker Compose starts PostgreSQL successfully
+- [x] Create control parameters (request_state, request_type, priority, functional_category)
+- [x] Create DevelopmentRequest model with self-referencing parent/child
+- [x] Implement Role-based access control matrix
+- [x] Add security checks for line item ownership
+- [x] Add circular parent detection
+- [x] Add N+1 query optimization
+- [x] Write 165+ tests with edge cases
 
-**Verification**: Run `docker-compose up -d postgres` and confirm database is accessible.
-**Note**: Docker daemon must be running. Run `open -a Docker` to start Docker Desktop.
+**Files Added**:
+- `backend/app/models/control_parameters/*.py`
+- `backend/app/models/development_request.py`
+- `backend/app/core/security_matrix.py`
+- `backend/app/api/v1/development_requests.py`
+- `backend/app/api/v1/roles.py`
+- `backend/app/services/development_request_service.py`
+- `backend/scripts/seed_roles.py`
+- `backend/scripts/seed_development_request_params.py`
 
----
-
-### Phase 2: Database Configuration ✅ COMPLETED
-**Objective**: Set up database connection, session management, and Alembic.
-
-**Tasks**:
-- [x] Create `backend/app/core/config.py` - Settings from environment variables
-- [x] Create `backend/app/core/database.py` - Session management with SQLAlchemy
-- [x] Initialize Alembic: `alembic init alembic`
-- [x] Configure `backend/alembic.ini` with database URL
-- [x] Create `backend/alembic/env.py` with SQLAlchemy metadata
-- [x] Create initial migration to verify setup works
-
-**Verification**: Run `alembic current` and `alembic history` to confirm migrations are tracked.
-
----
-
-### Phase 3: Database Models ✅ COMPLETED
-**Objective**: Define SQLAlchemy models for all entities.
+### Phase 10: Frontend Integration ✅ COMPLETED
+**Objective**: Add React frontend with Vite and Tailwind CSS
 
 **Tasks**:
-- [x] Create `backend/app/models/base.py` - SQLAlchemy declarative base
-- [x] Create `backend/app/models/user.py` - User model for JWT auth
-- [x] Create `backend/app/models/environment.py` - Environment with encrypted credentials
-- [x] Create `backend/app/models/module.py` - Module master table
-- [x] Create `backend/app/models/sync_record.py` - Sync record with state machine
-- [x] Add indexes for version sorting (`ix_module_version_sort`)
-- [x] Create Alembic migration: `alembic revision --autogenerate -m "Create initial tables"`
-- [x] Run migration: `alembic upgrade head`
+- [x] Create React frontend with Vite + TypeScript
+- [x] Add Tailwind CSS with Radix UI components
+- [x] Implement authentication flow with Zustand
+- [x] Add environment management pages
+- [x] Add sync functionality
+- [x] Add reports page
+- [x] Add Playwright E2E testing
 
-**Verification**: Run `alembic upgrade head` and check database tables exist.
-
----
-
-### Phase 4: Repository Layer ✅ COMPLETED
-**Objective**: Implement data access layer with CRUD operations.
-
-**Tasks**:
-- [x] Create `backend/app/repositories/base.py` - Generic base repository class
-- [x] Create `backend/app/repositories/user.py` - User repository
-- [x] Create `backend/app/repositories/environment.py` - Environment repository with Fernet encryption
-- [x] Create `backend/app/repositories/module.py` - Module repository with INSERT ON CONFLICT
-- [x] Create `backend/app/repositories/sync_record.py` - Sync record repository with state transitions
-- [ ] Write unit tests for each repository
-
-**Verification**: Run `pytest tests/test_repositories/ -v` and ensure all tests pass.
-
----
-
-### Phase 5: Service Layer ✅ COMPLETED
-**Objective**: Migrate business logic from legacy code to services.
-
-**Tasks**:
-- [x] Create `backend/app/services/encryption.py` - Fernet encryption utilities
-- [x] Migrate `odoo_xmlprc_config.py` → `backend/app/services/odoo_client.py`
-- [x] Migrate `comparison_engine.py` → `backend/app/services/comparer.py`
-- [x] Create `backend/app/services/sync_service.py` - Orchestrates Odoo sync workflow
-- [x] Create `backend/app/services/auth_service.py` - JWT token generation/validation
-- [ ] Write unit tests for each service
-
-**Verification**: Run `pytest tests/test_services/ -v` and ensure all tests pass.
-
----
-
-### Phase 6: API Layer ✅ COMPLETED
-**Objective**: Build FastAPI endpoints for frontend consumption.
-
-**Tasks**:
-- [x] Create `backend/app/api/deps.py` - JWT dependency injection
-- [x] Create `backend/app/schemas/auth.py` - Token request/response schemas
-- [x] Create `backend/app/schemas/sync.py` - Sync request/response schemas
-- [x] Create `backend/app/schemas/report.py` - Report schemas
-- [x] Create `backend/app/api/v1/auth.py` - POST `/api/v1/auth/token`
-- [x] Create `backend/app/api/v1/environments.py` - CRUD for environments
-- [x] Create `backend/app/api/v1/sync.py` - POST `/api/v1/sync/{env_name}`, GET `/api/v1/sync/{job_id}`
-- [x] Create `backend/app/api/v1/reports.py` - GET `/api/v1/reports/comparison`
-- [x] Register all routers in `backend/app/main.py`
-- [ ] Write integration tests for API endpoints
-
-**Verification**: Start server with `uvicorn app.main:app --reload` and test endpoints via Swagger UI.
-
----
-
-### Phase 7: Background Task Integration ✅ COMPLETED
-**Objective**: Implement async sync using FastAPI BackgroundTasks.
-
-**Tasks**:
-- [x] Integrate BackgroundTasks into sync endpoint
-- [x] Implement job progress tracking via SyncRecord state machine
-- [x] Add error handling and retry logic
-- [ ] Write tests for background task execution
-
-**Verification**: Trigger sync and verify job_id is returned immediately; poll status until completion.
-
----
-
-### Phase 8: Data Migration ✅ COMPLETED
-**Objective**: One-time script to migrate legacy CSV data to PostgreSQL.
-
-**Tasks**:
-- [x] Create `backend/scripts/migrate_environments.py` - Import `environments.json` → DB
-- [x] Create `backend/scripts/migrate_modules.py` - Import `module_master.csv` → DB
-- [ ] Test migration scripts on sample data
-- [ ] Document migration steps for production
-
-**Verification**: Run scripts and verify data integrity in database.
-
----
-
-### Phase 9: Legacy Code Preservation ✅ COMPLETED
-**Objective**: Archive current code to `Legacy/` folder.
-
-**Tasks**:
-- [x] Create `Legacy/` directory
-- [x] Move `app/` directory contents to `Legacy/`
-- [x] Move `data/` directory to `Legacy/`
-- [x] Update `.gitignore` to exclude legacy data files
-- [ ] Update README to reference new backend structure
-
-**Verification**: Confirm `Legacy/` contains all original code and `data/` is not tracked.
-
----
-
-### Phase 10: Final Verification & Documentation ✅ COMPLETED
-**Objective**: Ensure system is production-ready.
-
-**Tasks**:
-- [x] Run full test suite: `pytest --cov=app`
-- [x] Verify API endpoints work end-to-end
-- [x] Document deployment instructions
-- [x] Update AGENTS.md with any final changes
-
-**Verification**: All tests pass, API responds correctly, deployment docs complete.
+**Frontend Structure**:
+```
+frontend/src/
+├── api/           # Axios API clients
+├── components/    # UI components
+├── hooks/         # React Query hooks
+├── pages/         # Route pages
+├── store/         # Zustand auth store
+└── types/         # TypeScript interfaces
+```
 
 ---
 
 ## Phase Completion Criteria
 
-Each phase must be verified before proceeding:
-
-| Phase | Verification Command |
-|-------|---------------------|
-| Phase 1 | `docker-compose ps` shows postgres running |
-| Phase 2 | `alembic current` returns baseline |
-| Phase 3 | Tables exist in PostgreSQL |
-| Phase 4 | `pytest tests/test_repositories/` passes |
-| Phase 5 | `pytest tests/test_services/` passes |
-| Phase 6 | `curl localhost:8000/docs` shows Swagger UI |
-| Phase 7 | Sync returns job_id immediately |
-| Phase 8 | Data queries return correct counts |
-| Phase 9 | `Legacy/` contains archived code |
-| Phase 10 | All tests pass, docs complete |
+| Phase | Verification |
+|-------|--------------|
+| Backend Setup | `docker-compose ps` shows postgres |
+| Database | `alembic current` returns baseline |
+| Tests | `pytest tests/` all pass |
+| API | `curl localhost:8000/docs` shows Swagger |
+| Frontend | `npm run dev` starts successfully |
 
 ---
 
 ## Commit Standards
 
-**Branch naming**: `feature/migration-{phase-number}-{short-description}`
+**Branch naming**: `feature/{short-description}`
 
 **Commit message format**:
 ```
@@ -437,39 +428,66 @@ Each phase must be verified before proceeding:
 
 **Examples**:
 ```
-feat(phase1): add backend project structure and dependencies
+feat(backend): add Development Request CRUD with RBAC
 
-- Add requirements.txt with FastAPI, SQLAlchemy, Alembic
-- Add docker-compose.yml for PostgreSQL
-- Add initial app skeleton with main.py
+- Add DevelopmentRequest model with parent/child relationships
+- Implement role-based access control matrix
+- Add security checks for line item ownership
+- Write comprehensive edge case tests
 
-Closes #migration-phase-1
+Closes #development-request-module
 ```
 
 ```
-feat(phase3): create database models for environments and modules
+feat(frontend): add React frontend with authentication
 
-- Add Environment model with Fernet-encrypted password field
-- Add Module model with unique name constraint
-- Add SyncRecord model with state machine
-- Add version sorting index
-
-Closes #migration-phase-3
+- Add Vite + TypeScript setup with Tailwind CSS
+- Implement JWT authentication flow
+- Add environment management pages
+- Add Playwright E2E tests
 ```
 
 ---
 
-## Plan Finalized
-This AGENTS.md covers:
-- ✅ Build/lint/test commands (including single test execution)
-- ✅ Layered architecture rules (API → Service → Repository)
-- ✅ Code style (naming, types, imports, docstrings, error handling)
-- ✅ Database conventions (version storage, state machine, constraints)
-- ✅ Security (JWT, Fernet, environment variables)
-- ✅ Testing guidelines with fixtures
-- ✅ Migration strategy from legacy code
-- ✅ Detailed 10-phase migration plan with task checklists
-- ✅ Phase verification criteria
-- ✅ Git commit standards
+## Development Request Module (Phase 9 Highlights)
 
-Always use nohup when running a terminal
+### Control Parameters
+| Parameter | Description |
+|-----------|-------------|
+| RequestState | pending, in_progress, review, approved, rejected, deployed, closed |
+| RequestType | feature, bugfix, refactor, documentation, security, performance |
+| Priority | low, medium, high, critical |
+| FunctionalCategory | modules, integrations, database, security, ui, api, documentation |
+
+### RBAC Matrix
+| Role | Create | Read | Update | Delete | Assign |
+|------|--------|------|--------|--------|--------|
+| admin | ✓ | ✓ | ✓ | ✓ | ✓ |
+| manager | ✓ | ✓ | ✓ | ✗ | ✓ |
+| developer | ✓ | own | own | ✗ | ✗ |
+| viewer | ✗ | ✓ | ✗ | ✗ | ✗ |
+
+### Security Features
+- Line item ownership verification on updates
+- Circular parent detection (A→B→C→A)
+- Self-reference prevention
+- N+1 query optimization with eager loading
+
+---
+
+## Plan Finalized
+
+This AGENTS.md covers:
+- ✅ Full project structure (backend + frontend)
+- ✅ Build/lint/test commands for both backend and frontend
+- ✅ Code style guidelines (Python + TypeScript/React)
+- ✅ Layered architecture rules
+- ✅ Database conventions
+- ✅ Security (JWT, Fernet, RBAC)
+- ✅ Testing guidelines with fixtures
+- ✅ Migration phases with Phase 10 completion
+- ✅ Development Request module details
+- ✅ Commit standards
+- ✅ Centralized plan management (`.opencode/plans/`)
+
+**Always use nohup when running long-running terminal commands.**
