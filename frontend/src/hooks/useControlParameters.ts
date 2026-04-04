@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { controlParametersApi, type ControlParameterCreate } from "@/api/control-parameters";
+import { controlParametersApi, type ControlParameterCreate, type ControlParameterUpdate } from "@/api/control-parameters";
 import { toast } from "sonner";
 
 export const controlParamKeys = {
@@ -64,6 +64,22 @@ export function useRestoreControlParameter() {
     },
     onError: (error: { response?: { data?: { detail?: string } } }) => {
       toast.error(error.response?.data?.detail || "Failed to restore parameter");
+    },
+  });
+}
+
+export function useUpdateControlParameter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ paramType, id, data }: { paramType: string; id: number; data: ControlParameterUpdate }) =>
+      controlParametersApi.update(paramType, id, data),
+    onSuccess: (_, { paramType }) => {
+      queryClient.invalidateQueries({ queryKey: controlParamKeys.list(paramType) });
+      toast.success("Parameter updated successfully");
+    },
+    onError: (error: { response?: { data?: { detail?: string } } }) => {
+      toast.error(error.response?.data?.detail || "Failed to update parameter");
     },
   });
 }

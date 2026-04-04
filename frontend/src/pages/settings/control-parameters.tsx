@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, RotateCcw, Archive, AlertTriangle } from "lucide-react";
+import { Plus, RotateCcw, Archive, AlertTriangle, Pencil } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -33,6 +33,7 @@ import {
   useCreateControlParameter,
   useArchiveControlParameter,
   useRestoreControlParameter,
+  useUpdateControlParameter,
   type ControlParameterType,
 } from "@/hooks/useControlParameters";
 import type { ControlParameterWithUsage } from "@/api/control-parameters";
@@ -82,10 +83,12 @@ function ParameterRow({
   item,
   onArchive,
   onRestore,
+  onEdit,
 }: {
   item: ControlParameterWithUsage;
   onArchive: () => void;
   onRestore: () => void;
+  onEdit: () => void;
 }) {
   return (
     <TableRow className={cn(!item.is_active && "opacity-60")}>
@@ -115,6 +118,11 @@ function ParameterRow({
       </TableCell>
       <TableCell className="text-right">
         <div className="flex justify-end gap-1">
+          {item.is_active && (
+            <Button variant="ghost" size="icon" onClick={onEdit} title="Edit">
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
           {item.is_active ? (
             <Button
               variant="ghost"
@@ -145,9 +153,17 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
   const createMutation = useCreateControlParameter();
   const archiveMutation = useArchiveControlParameter();
   const restoreMutation = useRestoreControlParameter();
+  const updateMutation = useUpdateControlParameter();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ControlParameterWithUsage | null>(null);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
 
   const form = useForm<RequestTypeFormData>({
+    resolver: zodResolver(requestTypeSchema),
+    defaultValues: { name: "", description: "", category: "" },
+  });
+
+  const editForm = useForm<RequestTypeFormData>({
     resolver: zodResolver(requestTypeSchema),
     defaultValues: { name: "", description: "", category: "" },
   });
@@ -160,6 +176,32 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
     } catch {
       // Error handled by mutation
     }
+  };
+
+  const onEditSubmit = async (data: RequestTypeFormData) => {
+    if (!editingItem) return;
+    try {
+      await updateMutation.mutateAsync({
+        paramType: "request-types",
+        id: editingItem.id,
+        data: { name: data.name, description: data.description },
+      });
+      setIsEditSheetOpen(false);
+      setEditingItem(null);
+      editForm.reset();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const handleEdit = (item: ControlParameterWithUsage) => {
+    setEditingItem(item);
+    editForm.reset({
+      name: item.name,
+      description: item.description || "",
+      category: item.category || "",
+    });
+    setIsEditSheetOpen(true);
   };
 
   const filteredItems = showArchived ? items : items?.filter((item) => item.is_active);
@@ -223,9 +265,40 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
           <TableContent items={filteredItems} isLoading={isLoading} error={error} type="request-types"
             onArchive={(id) => archiveMutation.mutate({ paramType: "request-types", id })}
             onRestore={(id) => restoreMutation.mutate({ paramType: "request-types", id })}
+            onEdit={handleEdit}
           />
         </CardContent>
       </Card>
+
+      {/* Edit Sheet */}
+      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit Request Type</SheetTitle>
+            <SheetDescription>Update name and description (category is read-only)</SheetDescription>
+          </SheetHeader>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input id="edit-name" {...editForm.register("name")} />
+              {editForm.formState.errors.name && (
+                <p className="text-sm text-red-500">{editForm.formState.errors.name.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input id="edit-description" {...editForm.register("description")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-category">Category (read-only)</Label>
+              <Input id="edit-category" value={editingItem?.category || ""} disabled className="opacity-60" />
+            </div>
+            <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </form>
+        </SheetContent>
+      </Sheet>
     </TabsContent>
   );
 }
@@ -235,9 +308,17 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
   const createMutation = useCreateControlParameter();
   const archiveMutation = useArchiveControlParameter();
   const restoreMutation = useRestoreControlParameter();
+  const updateMutation = useUpdateControlParameter();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ControlParameterWithUsage | null>(null);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
 
   const form = useForm<RequestStateFormData>({
+    resolver: zodResolver(requestStateSchema),
+    defaultValues: { name: "", description: "", category: "open" },
+  });
+
+  const editForm = useForm<RequestStateFormData>({
     resolver: zodResolver(requestStateSchema),
     defaultValues: { name: "", description: "", category: "open" },
   });
@@ -250,6 +331,32 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
     } catch {
       // Error handled by mutation
     }
+  };
+
+  const onEditSubmit = async (data: RequestStateFormData) => {
+    if (!editingItem) return;
+    try {
+      await updateMutation.mutateAsync({
+        paramType: "request-states",
+        id: editingItem.id,
+        data: { name: data.name, description: data.description },
+      });
+      setIsEditSheetOpen(false);
+      setEditingItem(null);
+      editForm.reset();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const handleEdit = (item: ControlParameterWithUsage) => {
+    setEditingItem(item);
+    editForm.reset({
+      name: item.name,
+      description: item.description || "",
+      category: item.category || "open",
+    });
+    setIsEditSheetOpen(true);
   };
 
   const filteredItems = showArchived ? items : items?.filter((item) => item.is_active);
@@ -309,9 +416,39 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
           <TableContent items={filteredItems} isLoading={isLoading} error={error} type="request-states"
             onArchive={(id) => archiveMutation.mutate({ paramType: "request-states", id })}
             onRestore={(id) => restoreMutation.mutate({ paramType: "request-states", id })}
+            onEdit={handleEdit}
           />
         </CardContent>
       </Card>
+
+      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit Request State</SheetTitle>
+            <SheetDescription>Update name and description (category is read-only)</SheetDescription>
+          </SheetHeader>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input id="edit-name" {...editForm.register("name")} />
+              {editForm.formState.errors.name && (
+                <p className="text-sm text-red-500">{editForm.formState.errors.name.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input id="edit-description" {...editForm.register("description")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-category">Category (read-only)</Label>
+              <Input id="edit-category" value={editingItem?.category || ""} disabled className="opacity-60" />
+            </div>
+            <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </form>
+        </SheetContent>
+      </Sheet>
     </TabsContent>
   );
 }
@@ -321,9 +458,17 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
   const createMutation = useCreateControlParameter();
   const archiveMutation = useArchiveControlParameter();
   const restoreMutation = useRestoreControlParameter();
+  const updateMutation = useUpdateControlParameter();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ControlParameterWithUsage | null>(null);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
 
   const form = useForm<PriorityFormData>({
+    resolver: zodResolver(prioritySchema),
+    defaultValues: { name: "", description: "", level: 3 },
+  });
+
+  const editForm = useForm<PriorityFormData>({
     resolver: zodResolver(prioritySchema),
     defaultValues: { name: "", description: "", level: 3 },
   });
@@ -336,6 +481,32 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
     } catch {
       // Error handled by mutation
     }
+  };
+
+  const onEditSubmit = async (data: PriorityFormData) => {
+    if (!editingItem) return;
+    try {
+      await updateMutation.mutateAsync({
+        paramType: "priorities",
+        id: editingItem.id,
+        data: { name: data.name, description: data.description },
+      });
+      setIsEditSheetOpen(false);
+      setEditingItem(null);
+      editForm.reset();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const handleEdit = (item: ControlParameterWithUsage) => {
+    setEditingItem(item);
+    editForm.reset({
+      name: item.name,
+      description: item.description || "",
+      level: item.level || 3,
+    });
+    setIsEditSheetOpen(true);
   };
 
   const filteredItems = showArchived ? items : items?.filter((item) => item.is_active);
@@ -389,9 +560,39 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
           <TableContent items={filteredItems} isLoading={isLoading} error={error} type="priorities"
             onArchive={(id) => archiveMutation.mutate({ paramType: "priorities", id })}
             onRestore={(id) => restoreMutation.mutate({ paramType: "priorities", id })}
+            onEdit={handleEdit}
           />
         </CardContent>
       </Card>
+
+      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit Priority</SheetTitle>
+            <SheetDescription>Update name and description (level is read-only)</SheetDescription>
+          </SheetHeader>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input id="edit-name" {...editForm.register("name")} />
+              {editForm.formState.errors.name && (
+                <p className="text-sm text-red-500">{editForm.formState.errors.name.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input id="edit-description" {...editForm.register("description")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-level">Level (read-only)</Label>
+              <Input id="edit-level" value={editingItem?.level || ""} disabled className="opacity-60" />
+            </div>
+            <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </form>
+        </SheetContent>
+      </Sheet>
     </TabsContent>
   );
 }
@@ -401,9 +602,17 @@ function CategoryTab({ showArchived }: { showArchived: boolean }) {
   const createMutation = useCreateControlParameter();
   const archiveMutation = useArchiveControlParameter();
   const restoreMutation = useRestoreControlParameter();
+  const updateMutation = useUpdateControlParameter();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ControlParameterWithUsage | null>(null);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
 
   const form = useForm<CategoryFormData>({
+    resolver: zodResolver(categorySchema),
+    defaultValues: { name: "", description: "" },
+  });
+
+  const editForm = useForm<CategoryFormData>({
     resolver: zodResolver(categorySchema),
     defaultValues: { name: "", description: "" },
   });
@@ -416,6 +625,31 @@ function CategoryTab({ showArchived }: { showArchived: boolean }) {
     } catch {
       // Error handled by mutation
     }
+  };
+
+  const onEditSubmit = async (data: CategoryFormData) => {
+    if (!editingItem) return;
+    try {
+      await updateMutation.mutateAsync({
+        paramType: "functional-categories",
+        id: editingItem.id,
+        data: { name: data.name, description: data.description },
+      });
+      setIsEditSheetOpen(false);
+      setEditingItem(null);
+      editForm.reset();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const handleEdit = (item: ControlParameterWithUsage) => {
+    setEditingItem(item);
+    editForm.reset({
+      name: item.name,
+      description: item.description || "",
+    });
+    setIsEditSheetOpen(true);
   };
 
   const filteredItems = showArchived ? items : items?.filter((item) => item.is_active);
@@ -462,9 +696,35 @@ function CategoryTab({ showArchived }: { showArchived: boolean }) {
           <TableContent items={filteredItems} isLoading={isLoading} error={error} type="functional-categories"
             onArchive={(id) => archiveMutation.mutate({ paramType: "functional-categories", id })}
             onRestore={(id) => restoreMutation.mutate({ paramType: "functional-categories", id })}
+            onEdit={handleEdit}
           />
         </CardContent>
       </Card>
+
+      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit Category</SheetTitle>
+            <SheetDescription>Update name and description</SheetDescription>
+          </SheetHeader>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input id="edit-name" {...editForm.register("name")} />
+              {editForm.formState.errors.name && (
+                <p className="text-sm text-red-500">{editForm.formState.errors.name.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input id="edit-description" {...editForm.register("description")} />
+            </div>
+            <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </form>
+        </SheetContent>
+      </Sheet>
     </TabsContent>
   );
 }
@@ -476,6 +736,7 @@ function TableContent({
   type,
   onArchive,
   onRestore,
+  onEdit,
 }: {
   items?: ControlParameterWithUsage[];
   isLoading: boolean;
@@ -483,6 +744,7 @@ function TableContent({
   type: string;
   onArchive: (id: number) => void;
   onRestore: (id: number) => void;
+  onEdit: (item: ControlParameterWithUsage) => void;
 }) {
   if (isLoading) {
     return (
@@ -512,7 +774,7 @@ function TableContent({
             {type === "request-types" && <TableHead className="hidden lg:table-cell">Category</TableHead>}
             {type === "request-states" && <TableHead className="hidden lg:table-cell">State Category</TableHead>}
             {type === "priorities" && <TableHead className="hidden lg:table-cell">Level</TableHead>}
-            <TableHead className="text-center">Usage</TableHead>
+            <TableHead className="text-center">Count</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -523,6 +785,7 @@ function TableContent({
               item={item}
               onArchive={() => onArchive(item.id)}
               onRestore={() => onRestore(item.id)}
+              onEdit={() => onEdit(item)}
             />
           ))}
         </TableBody>

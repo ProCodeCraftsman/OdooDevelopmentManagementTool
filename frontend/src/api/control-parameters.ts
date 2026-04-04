@@ -20,6 +20,11 @@ export interface ControlParameterCreate {
   level?: number;
 }
 
+export interface ControlParameterUpdate {
+  name?: string;
+  description?: string;
+}
+
 const PARAM_TYPE_MAP: Record<string, string> = {
   "request-types": "request-types",
   "request-states": "request-states",
@@ -58,6 +63,16 @@ export const controlParametersApi = {
   ): Promise<{ success: boolean; message: string }> => {
     const endpoint = PARAM_TYPE_MAP[paramType] || paramType;
     const response = await api.post(`/development-requests/control-parameters/${endpoint}/${id}/restore`);
+    return response.data;
+  },
+
+  update: async (
+    paramType: string,
+    id: number,
+    data: ControlParameterUpdate
+  ): Promise<ControlParameterWithUsage> => {
+    const endpoint = PARAM_TYPE_MAP[paramType] || paramType;
+    const response = await api.patch(`/development-requests/control-parameters/${endpoint}/${id}`, data);
     return response.data;
   },
 };
