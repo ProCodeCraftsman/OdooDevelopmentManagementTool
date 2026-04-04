@@ -7,6 +7,7 @@ interface SyncStatusProps {
 }
 
 export function SyncStatus({ environmentName: _environmentName }: SyncStatusProps) {
+  void _environmentName; // TODO: Implement environment-specific sync status
   const { data: syncStatus } = useSyncStatus(null);
 
   if (!syncStatus) {

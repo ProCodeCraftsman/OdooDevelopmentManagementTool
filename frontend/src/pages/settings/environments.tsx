@@ -90,6 +90,8 @@ export function SettingsEnvironmentsPage() {
     }
   };
 
+  const onFormSubmit = form.handleSubmit(onSubmit);
+
   const handleEdit = (env: EnvironmentList) => {
     setEditingEnv(env);
     form.reset({
@@ -145,7 +147,7 @@ export function SettingsEnvironmentsPage() {
                   : "Enter the details for the new Odoo server"}
               </SheetDescription>
             </SheetHeader>
-            <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-4 mt-6">
+            <form onSubmit={onFormSubmit} className="space-y-4 mt-6">
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input id="name" {...form.register("name")} />
