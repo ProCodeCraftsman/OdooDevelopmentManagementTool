@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime
+from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
@@ -15,6 +15,7 @@ class DevelopmentRequest(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     request_number: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     request_type_id: Mapped[int] = mapped_column(ForeignKey("request_types.id"))
     functional_category_id: Mapped[int] = mapped_column(ForeignKey("functional_categories.id"))

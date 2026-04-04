@@ -50,15 +50,16 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
         functional_category_id: Optional[int] = None,
         priority_id: Optional[int] = None,
         assigned_developer_id: Optional[int] = None,
-    ) -> List[DevelopmentRequest]:
+        is_archived: Optional[bool] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> tuple[List[DevelopmentRequest], int]:
         query = self.db.query(DevelopmentRequest).options(
             joinedload(DevelopmentRequest.request_type),
             joinedload(DevelopmentRequest.functional_category),
             joinedload(DevelopmentRequest.request_state),
             joinedload(DevelopmentRequest.priority),
             joinedload(DevelopmentRequest.assigned_developer),
-            selectinload(DevelopmentRequest.module_lines),
-            selectinload(DevelopmentRequest.release_plan_lines),
         )
 
         if request_type_id:
@@ -75,8 +76,17 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
             query = query.filter(
                 DevelopmentRequest.assigned_developer_id == assigned_developer_id
             )
+        if is_archived is not None:
+            query = query.filter(DevelopmentRequest.is_archived == is_archived)
 
-        return query.order_by(DevelopmentRequest.request_date.desc()).all()
+        total = query.count()
+        results = (
+            query.order_by(DevelopmentRequest.request_date.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return results, total
 
     def create_with_number(self, **kwargs) -> DevelopmentRequest:
         last = (
@@ -132,3 +142,40 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
             obj.request_state_id = closed_state.id
 
         return self.update(obj)
+
+    def soft_delete(self, id: int) -> bool:
+        obj = self.get(id)
+        if not obj:
+            return False
+        obj.is_archived = True
+        self.db.commit()
+        return True
+
+    def restore(self, id: int) -> bool:
+        obj = self.get(id)
+        if not obj:
+            return False
+        obj.is_archived = False
+        self.db.commit()
+        return True
+
+    def get_child_requests(self, parent_id: int) -> List["DevelopmentRequest"]:
+        return self.db.query(DevelopmentRequest).filter(
+            DevelopmentRequest.parent_request_id == parent_id
+        ).all()
+
+    def archive_with_children(self, id: int) -> tuple[bool, List[int]]:
+        obj = self.get(id)
+        if not obj:
+            return False, []
+
+        child_ids = [child.id for child in self.get_child_requests(id)]
+        obj.is_archived = True
+
+        for child_id in child_ids:
+            child = self.get(child_id)
+            if child and not child.is_archived:
+                child.is_archived = True
+
+        self.db.commit()
+        return True, child_ids
