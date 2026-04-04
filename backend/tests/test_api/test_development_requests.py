@@ -675,8 +675,15 @@ class TestDevelopmentRequestEndpoints:
         )
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert "total" in data
+        assert "page" in data
+        assert "limit" in data
+        assert "pages" in data
+        assert isinstance(data["items"], list)
+        assert data["total"] >= 1
+        assert len(data["items"]) >= 1
 
     def test_get_request_with_permissions(self, client, admin_headers, dev_user):
         create_response = client.post(
