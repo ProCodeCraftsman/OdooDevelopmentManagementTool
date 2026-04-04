@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Server } from "lucide-react";
+import { Server, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

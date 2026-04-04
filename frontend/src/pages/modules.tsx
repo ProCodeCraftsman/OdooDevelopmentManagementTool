@@ -1,24 +1,81 @@
+import { useComparisonReport } from "@/hooks/useReports";
+import { DataTable, DataTableColumnHeader } from "@/components/ui/data-table";
+import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useComparisonReport } from "@/hooks/useReports";
-import { useState } from "react";
 import { Search, SearchX, X } from "lucide-react";
+import { type ColumnDef } from "@tanstack/react-table";
 
 export function ModulesPage() {
-  const { data: report, isLoading } = useComparisonReport();
+  const { data: report, isLoading: isReportLoading } = useComparisonReport();
   const [search, setSearch] = useState("");
-
-  const filteredRows = report?.rows.filter(
-    (row) =>
-      row.technical_name.toLowerCase().includes(search.toLowerCase()) ||
-      row.module_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(15);
 
   const hasSearch = search.trim().length > 0;
-  const isEmpty = filteredRows?.length === 0;
+
+  // For now, use the report data transformed to match ModuleMasterRecord shape
+  const moduleMasterData = useMemo(() => {
+    if (!report?.rows) return [];
+    return report.rows.map((row, index) => ({
+      id: index,
+      technical_name: row.technical_name,
+      shortdesc: row.module_name || null,
+      first_seen_date: null, // Will be populated when API is ready
+    }));
+  }, [report]);
+
+  const filteredData = useMemo(() => {
+    if (!search.trim()) return moduleMasterData;
+    const searchLower = search.toLowerCase();
+    return moduleMasterData.filter(
+      (row) =>
+        row.technical_name.toLowerCase().includes(searchLower) ||
+        (row.shortdesc && row.shortdesc.toLowerCase().includes(searchLower))
+    );
+  }, [moduleMasterData, search]);
+
+  const columns: ColumnDef<typeof moduleMasterData[0]>[] = useMemo(
+    () => [
+      {
+        accessorKey: "technical_name",
+        header: ({ column }: { column: { getIsSorted: () => "asc" | "desc" | false; getToggleSortingHandler: () => ((event: unknown) => void) | undefined } }) => (
+          <DataTableColumnHeader column={column} title="Technical Name" />
+        ),
+        cell: ({ row }: { row: { getValue: (key: string) => unknown } }): React.ReactNode => (
+          <div className="font-mono text-sm">{String(row.getValue("technical_name"))}</div>
+        ),
+      },
+      {
+        accessorKey: "shortdesc",
+        header: ({ column }: { column: { getIsSorted: () => "asc" | "desc" | false; getToggleSortingHandler: () => ((event: unknown) => void) | undefined } }) => (
+          <DataTableColumnHeader column={column} title="Description" />
+        ),
+        cell: ({ row }: { row: { getValue: (key: string) => unknown } }): React.ReactNode => (
+          <span className="text-muted-foreground">
+            {String(row.getValue("shortdesc") || "-")}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "first_seen_date",
+        header: ({ column }: { column: { getIsSorted: () => "asc" | "desc" | false; getToggleSortingHandler: () => ((event: unknown) => void) | undefined } }) => (
+          <DataTableColumnHeader column={column} title="First Seen" />
+        ),
+        cell: ({ row }: { row: { getValue: (key: string) => unknown } }): React.ReactNode => {
+          const value = row.getValue("first_seen_date");
+          if (!value) return <span className="text-muted-foreground">-</span>;
+          const date = new Date(value as string);
+          return <span>{date.toLocaleDateString()}</span>;
+        },
+      },
+    ],
+    []
+  );
+
+  const isEmpty = filteredData.length === 0;
 
   return (
     <div className="space-y-6">
@@ -30,7 +87,7 @@ export function ModulesPage() {
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search modules..."
+          placeholder="Filter by technical name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 pr-9"
@@ -47,12 +104,10 @@ export function ModulesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            Modules ({filteredRows?.length ?? 0})
-          </CardTitle>
+          <CardTitle>Modules ({filteredData.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isReportLoading ? (
             <div className="space-y-4">
               {[1, 2, 3, 4, 5].map((i) => (
                 <Skeleton key={i} className="h-12 w-full" />
@@ -82,33 +137,21 @@ export function ModulesPage() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full min-w-[500px]">
-                <thead className="sticky top-0 z-10 bg-background">
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-3 text-left text-sm font-medium">Technical Name</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium hidden sm:table-cell">Description</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows?.map((row) => (
-                    <tr key={row.technical_name} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-mono">{row.technical_name}</div>
-                        <div className="text-xs text-muted-foreground sm:hidden">{row.module_name || "-"}</div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">
-                        {row.module_name || "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant="secondary">Installed</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={columns}
+              data={filteredData}
+              pageIndex={pageIndex}
+              pageSize={pageSize}
+              onPaginationChange={(pagination) => {
+                setPageIndex(pagination.pageIndex);
+                setPageSize(pagination.pageSize);
+              }}
+              searchable={false}
+              searchValue={search}
+              onSearchChange={() => {}}
+              loading={isReportLoading}
+              pageCount={Math.ceil(filteredData.length / pageSize)}
+            />
           )}
         </CardContent>
       </Card>
