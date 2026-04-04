@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Server, Plus } from "lucide-react";
+import { Server } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,12 +16,6 @@ export function EnvironmentsPage() {
           <h2 className="text-2xl font-bold">Environments</h2>
           <p className="text-muted-foreground">Manage your Odoo server environments</p>
         </div>
-        <Button asChild>
-          <Link to="/settings/environments">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Environment
-          </Link>
-        </Button>
       </div>
 
       {isLoading ? (

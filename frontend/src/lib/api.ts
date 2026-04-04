@@ -26,6 +26,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Log network errors for debugging
+    if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+      console.error("[API] Network Error:", {
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL,
+        fullURL: error.config?.baseURL + error.config?.url,
+      });
+    }
+    
     if (error.response?.status === 401) {
       useAuthStore.getState().logout();
       window.location.href = "/login";

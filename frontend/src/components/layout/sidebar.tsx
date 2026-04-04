@@ -36,10 +36,10 @@ import {
 
 const mainNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Development Requests", href: "/development-requests", icon: ClipboardList },
   { title: "Modules", href: "/modules", icon: Package },
   { title: "Environments", href: "/environments", icon: Server },
   { title: "Reports", href: "/reports/comparison", icon: FileText },
-  { title: "Development Requests", href: "/development-requests", icon: ClipboardList },
 ];
 
 const settingsNavItems = [
@@ -277,7 +277,7 @@ export function Sidebar() {
     return (
       <>
         <header className="fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b bg-background px-4">
-          <span className="font-semibold text-lg">Odoo Auditor</span>
+          <span className="font-semibold text-lg">GPS Odoo Tracker</span>
           <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
@@ -311,9 +311,9 @@ export function Sidebar() {
     >
       <div className="flex h-14 items-center justify-between border-b px-4">
         {!collapsed && (
-          <span className="font-semibold text-lg">Odoo Auditor</span>
+          <span className="font-semibold text-lg">GPS Odoo Tracker</span>
         )}
-        {collapsed && <span className="font-semibold text-lg">OA</span>}
+        {collapsed && <span className="font-semibold text-lg">GT</span>}
         <Button
           variant="ghost"
           size="icon"

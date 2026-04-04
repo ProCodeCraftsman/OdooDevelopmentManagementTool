@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Archive } from "lucide-react";
+import { Plus, Archive, SearchX, RefreshCw, ServerOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,16 +29,18 @@ import {
 import type { DevelopmentRequestFilters } from "@/api/development-requests";
 import { useAuthStore } from "@/store/auth-store";
 
-function getStateColor(category: string): string {
+function getStateBadgeVariant(category: string): "default" | "secondary" | "destructive" | "outline" | "success" {
   switch (category?.toLowerCase()) {
     case "open":
-      return "bg-blue-100 text-blue-800";
+      return "default";
     case "in_progress":
-      return "bg-yellow-100 text-yellow-800";
+      return "secondary";
     case "closed":
-      return "bg-green-100 text-green-800";
+      return "success";
+    case "rejected":
+      return "destructive";
     default:
-      return "bg-gray-100 text-gray-800";
+      return "outline";
   }
 }
 
@@ -64,7 +66,7 @@ export function DevelopmentRequestsListPage() {
     is_archived: showArchived ? undefined : false,
   };
 
-  const { data, isLoading, error } = useDevelopmentRequests(effectiveFilters, page, PAGE_SIZE);
+  const { data, isLoading, error, refetch } = useDevelopmentRequests(effectiveFilters, page, PAGE_SIZE);
   const { data: controlParams } = useControlParameters();
 
   const handleFilterChange = (key: keyof DevelopmentRequestFilters, value: string) => {
@@ -79,6 +81,9 @@ export function DevelopmentRequestsListPage() {
     setPage(1);
     setFilters({});
   };
+
+  const hasActiveFilters = filters.request_type_id || filters.request_state_id || filters.priority_id || filters.functional_category_id;
+  const isNetworkError = error && (error as Error).message === "Network Error";
 
   return (
     <div className="space-y-6">
@@ -181,10 +186,7 @@ export function DevelopmentRequestsListPage() {
               </label>
             </div>
 
-            {(filters.request_type_id ||
-              filters.request_state_id ||
-              filters.priority_id ||
-              filters.functional_category_id) && (
+            {hasActiveFilters && (
               <Button variant="ghost" onClick={clearFilters}>
                 Clear Filters
               </Button>
@@ -201,27 +203,63 @@ export function DevelopmentRequestsListPage() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
+          ) : isNetworkError ? (
+            <div className="flex flex-col items-center justify-center p-12">
+              <ServerOff className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Cannot connect to server</h3>
+              <p className="text-muted-foreground text-center mb-4">
+                Unable to reach the API server. Please check your connection and try again.
+              </p>
+              <Button onClick={() => refetch()} variant="outline">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </div>
           ) : error ? (
-            <div className="p-6 text-center text-red-500">
-              Error loading requests: {(error as Error).message}
+            <div className="flex flex-col items-center justify-center p-12">
+              <ServerOff className="h-12 w-12 text-destructive mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Error loading requests</h3>
+              <p className="text-muted-foreground text-center mb-4">
+                {(error as Error).message}
+              </p>
+              <Button onClick={() => refetch()} variant="outline">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
             </div>
           ) : data?.items.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-muted-foreground">No development requests found.</p>
-              {isAdmin && (
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => navigate("/development-requests/new")}
-                >
-                  Create your first request
-                </Button>
+            <div className="flex flex-col items-center justify-center p-12">
+              {hasActiveFilters ? (
+                <>
+                  <SearchX className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No requests found</h3>
+                  <p className="text-muted-foreground text-center mb-4">
+                    No requests match your current filters. Try adjusting your search criteria.
+                  </p>
+                  <Button variant="outline" onClick={clearFilters}>
+                    Clear Filters
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Archive className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No development requests</h3>
+                  <p className="text-muted-foreground text-center mb-4">
+                    Get started by creating your first development request.
+                  </p>
+                  {isAdmin && (
+                    <Button onClick={() => navigate("/development-requests/new")}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Request
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           ) : (
             <>
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
                     <TableHead className="w-[100px]">ID</TableHead>
                     <TableHead>Request Type</TableHead>
@@ -245,7 +283,7 @@ export function DevelopmentRequestsListPage() {
                         <Badge variant="outline">{request.request_type?.name || "Unknown"}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStateColor(request.request_state?.category)}>
+                        <Badge variant={getStateBadgeVariant(request.request_state?.category)}>
                           {request.request_state?.name || "Unknown"}
                         </Badge>
                       </TableCell>
