@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -26,6 +26,7 @@ from app.schemas.development_request import (
     DevelopmentRequestUpdate,
     DevelopmentRequestResponse,
     DevelopmentRequestListResponse,
+    PaginatedDevelopmentRequestListResponse,
     ReopenRequest,
     RequestModuleLineCreate,
     RequestModuleLineResponse,
@@ -34,6 +35,22 @@ from app.services.development_request_service import DevelopmentRequestService
 from app.core.security_matrix import SecurityMatrixEngine
 
 router = APIRouter(prefix="/development-requests", tags=["Development Requests"])
+
+
+def _get_repo_and_model(db: Session, param_type: str):
+    repos_models = {
+        "request-types": (RequestTypeRepository(db), RequestType),
+        "request-states": (RequestStateRepository(db), RequestState),
+        "functional-categories": (FunctionalCategoryRepository(db), FunctionalCategory),
+        "priorities": (PriorityRepository(db), Priority),
+    }
+    result = repos_models.get(param_type)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Control parameter type '{param_type}' not found",
+        )
+    return result
 
 
 @router.get("/control-parameters/", response_model=ControlParametersResponse)
@@ -132,18 +149,39 @@ def soft_delete_control_parameter(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
-    repos = {
-        "request-types": RequestTypeRepository(db),
-        "request-states": RequestStateRepository(db),
-        "functional-categories": FunctionalCategoryRepository(db),
-        "priorities": PriorityRepository(db),
-    }
+    repo, _ = _get_repo_and_model(db, param_type)
 
-    repo = repos.get(param_type)
-    if not repo:
+    if not repo.soft_delete(id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Control parameter type '{param_type}' not found",
+            detail=f"{param_type} with id {id} not found",
+        )
+
+
+@router.get("/control-parameters/{param_type}/all")
+def list_all_control_parameters(
+    param_type: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    repo, _ = _get_repo_and_model(db, param_type)
+    return repo.get_all_with_usage_count()
+
+
+@router.post("/control-parameters/{param_type}/{id}/archive")
+def archive_control_parameter(
+    param_type: str,
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    repo, _ = _get_repo_and_model(db, param_type)
+
+    usage_count = repo.get_usage_count(id)
+    if usage_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot archive: This parameter is used by {usage_count} development request(s). Reassign them first.",
         )
 
     if not repo.soft_delete(id):
@@ -151,6 +189,26 @@ def soft_delete_control_parameter(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"{param_type} with id {id} not found",
         )
+
+    return {"success": True, "message": "Parameter archived successfully"}
+
+
+@router.post("/control-parameters/{param_type}/{id}/restore")
+def restore_control_parameter(
+    param_type: str,
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    repo, _ = _get_repo_and_model(db, param_type)
+
+    if not repo.restore(id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{param_type} with id {id} not found",
+        )
+
+    return {"success": True, "message": "Parameter restored successfully"}
 
 
 @router.post("/requests/", response_model=DevelopmentRequestResponse)
@@ -170,23 +228,38 @@ def create_request(
     return response
 
 
-@router.get("/requests/", response_model=List[DevelopmentRequestListResponse])
+@router.get("/requests/", response_model=PaginatedDevelopmentRequestListResponse)
 def list_requests(
     request_type_id: Optional[int] = Query(None),
     request_state_id: Optional[int] = Query(None),
     functional_category_id: Optional[int] = Query(None),
     priority_id: Optional[int] = Query(None),
     assigned_developer_id: Optional[int] = Query(None),
+    is_archived: Optional[bool] = Query(None, description="Filter by archived status. True=archived only, False=non-archived only, null=both"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     repo = DevelopmentRequestRepository(db)
-    return repo.get_all_with_filters(
+    skip = (page - 1) * limit
+    items, total = repo.get_all_with_filters(
         request_type_id=request_type_id,
         request_state_id=request_state_id,
         functional_category_id=functional_category_id,
         priority_id=priority_id,
         assigned_developer_id=assigned_developer_id,
+        is_archived=is_archived,
+        skip=skip,
+        limit=limit,
+    )
+    pages = (total + limit - 1) // limit if total > 0 else 0
+    return PaginatedDevelopmentRequestListResponse(
+        items=items,
+        total=total,
+        page=page,
+        limit=limit,
+        pages=pages,
     )
 
 
@@ -270,3 +343,50 @@ def delete_module_line(
 ):
     service = DevelopmentRequestService(db)
     service.delete_module_line(current_user, request_id, line_id)
+
+
+@router.post("/requests/{request_id}/archive", response_model=DevelopmentRequestResponse)
+def archive_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    repo = DevelopmentRequestRepository(db)
+    success, child_ids = repo.archive_with_children(request_id)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Development request not found",
+        )
+
+    full = repo.get_with_relations(request_id)
+    permissions = SecurityMatrixEngine.get_permissions_payload(
+        current_user, full.request_state.category
+    )
+    response = DevelopmentRequestResponse.model_validate(full)
+    response.permissions = permissions
+    return response
+
+
+@router.post("/requests/{request_id}/restore", response_model=DevelopmentRequestResponse)
+def restore_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    repo = DevelopmentRequestRepository(db)
+
+    if not repo.restore(request_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Development request not found",
+        )
+
+    full = repo.get_with_relations(request_id)
+    permissions = SecurityMatrixEngine.get_permissions_payload(
+        current_user, full.request_state.category
+    )
+    response = DevelopmentRequestResponse.model_validate(full)
+    response.permissions = permissions
+    return response
