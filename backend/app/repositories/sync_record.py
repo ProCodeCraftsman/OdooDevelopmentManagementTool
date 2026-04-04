@@ -34,6 +34,38 @@ class SyncRecordRepository(BaseRepository[SyncRecord]):
             return self.update(job)
         return None
 
+    def create_module_record(
+        self,
+        job_id: uuid.UUID,
+        environment_id: int,
+        module_id: int,
+        version_string: str,
+        version_components: Optional[dict] = None,
+        state: Optional[str] = None,
+    ) -> SyncRecord:
+        record = SyncRecord(
+            job_id=job_id,
+            environment_id=environment_id,
+            module_id=module_id,
+            version_string=version_string,
+            version_major=version_components.get("major") if version_components else None,
+            version_minor=version_components.get("minor") if version_components else None,
+            version_patch=version_components.get("patch") if version_components else None,
+            version_build=version_components.get("build") if version_components else None,
+            state=state,
+            status=SyncStatus.COMPLETED,
+        )
+        return self.create(record)
+
+    def mark_job_completed(self, job_id: uuid.UUID) -> Optional[SyncRecord]:
+        job = self.get_by_job_id(job_id)
+        if job:
+            job.status = SyncStatus.COMPLETED
+            job.completed_at = datetime.utcnow()
+            job.progress_percent = 100
+            return self.update(job)
+        return None
+
     def complete_job(
         self,
         job_id: uuid.UUID,

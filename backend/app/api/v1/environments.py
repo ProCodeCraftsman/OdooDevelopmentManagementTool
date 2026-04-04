@@ -95,7 +95,7 @@ def update_environment(
     return repo.update(env)
 
 
-@router.delete("/{name}")
+@router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_environment(
     name: str,
     db: Session = Depends(get_db),
@@ -111,4 +111,4 @@ def delete_environment(
         )
     
     repo.delete(env.id)
-    return {"message": f"Environment '{name}' deleted"}
+    return None

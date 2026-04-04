@@ -19,7 +19,7 @@ class SyncRecord(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[uuid.UUID] = mapped_column(
-        default=uuid.uuid4, unique=True, index=True
+        default=uuid.uuid4, index=True
     )
     environment_id: Mapped[int] = mapped_column(
         ForeignKey("environments.id"), index=True
@@ -32,7 +32,7 @@ class SyncRecord(Base):
     version_minor: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     version_patch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     version_build: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    version_string: Mapped[str] = mapped_column(String(100), nullable=False)
+    version_string: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     state: Mapped[str] = mapped_column(String(50), nullable=True)
     status: Mapped[SyncStatus] = mapped_column(
@@ -54,4 +54,5 @@ class SyncRecord(Base):
             "version_build",
         ),
         Index("ix_sync_records_env_module", "environment_id", "module_id"),
+        Index("ix_sync_records_job_module", "job_id", "module_id"),
     )

@@ -1,10 +1,11 @@
 from typing import Optional, Tuple
+from functools import cmp_to_key
 
 
 INVALID_VERSIONS = {"", "None", "N/A", "Missing Module"}
 
 
-def parse_semver(version_string: str) -> Optional[Tuple[int, ...]]:
+def parse_semver(version_string: Optional[str]) -> Optional[Tuple[int, ...]]:
     """Parse semantic version string into tuple for comparison.
     
     Args:
@@ -21,6 +22,34 @@ def parse_semver(version_string: str) -> Optional[Tuple[int, ...]]:
         return tuple(int(p) for p in parts)
     except (ValueError, AttributeError):
         return None
+
+
+def _normalize_tuple(t: Tuple[int, ...], length: int = 4) -> Tuple[int, ...]:
+    """Pad tuple to fixed length for comparison."""
+    if len(t) >= length:
+        return t[:length]
+    return t + (0,) * (length - len(t))
+
+
+def _compare_tuples(a: Optional[Tuple[int, ...]], b: Optional[Tuple[int, ...]]) -> int:
+    """Compare two version tuples safely."""
+    if a is None and b is None:
+        return 0
+    if a is None:
+        return -1
+    if b is None:
+        return 1
+    
+    max_len = max(len(a), len(b), 4)
+    a_norm = _normalize_tuple(a, max_len)
+    b_norm = _normalize_tuple(b, max_len)
+    
+    for i in range(max_len):
+        if a_norm[i] > b_norm[i]:
+            return 1
+        elif a_norm[i] < b_norm[i]:
+            return -1
+    return 0
 
 
 def parse_version_components(version_string: str) -> dict:
@@ -57,18 +86,7 @@ def compare_versions(source: str, target: str) -> int:
     s_ver = parse_semver(source)
     t_ver = parse_semver(target)
     
-    if s_ver is None and t_ver is None:
-        return 0
-    if s_ver is None:
-        return -1
-    if t_ver is None:
-        return 1
-    
-    if s_ver > t_ver:
-        return 1
-    if s_ver < t_ver:
-        return -1
-    return 0
+    return _compare_tuples(s_ver, t_ver)
 
 
 def calculate_release_action(source_version: str, target_version: str) -> str:
@@ -93,13 +111,14 @@ def calculate_release_action(source_version: str, target_version: str) -> str:
     if t_ver is None:
         return "Missing Module"
     
-    if s_ver > t_ver:
-        return "Upgrade"
-    
-    if s_ver == t_ver:
+    if s_ver is None and t_ver is None:
         return "No Action"
     
-    if t_ver > s_ver:
-        return "Error (Downgrade)"
+    comparison = _compare_tuples(s_ver, t_ver)
     
-    return "Unknown State"
+    if comparison > 0:
+        return "Upgrade"
+    elif comparison < 0:
+        return "Error (Downgrade)"
+    else:
+        return "No Action"

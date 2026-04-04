@@ -1,7 +1,11 @@
 from datetime import datetime
+from typing import TYPE_CHECKING, List
 from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.development_request import RequestModuleLine
 
 
 class Module(Base):
@@ -14,4 +18,8 @@ class Module(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    request_module_lines: Mapped[List["RequestModuleLine"]] = relationship(
+        "RequestModuleLine", back_populates="module"
     )

@@ -6,7 +6,10 @@ class EncryptionService:
     def __init__(self):
         settings = get_settings()
         if settings.FERNET_KEY:
-            self._fernet = Fernet(settings.FERNET_KEY.encode())
+            try:
+                self._fernet = Fernet(settings.FERNET_KEY.encode())
+            except (ValueError, Exception):
+                self._fernet = None
         else:
             self._fernet = None
 

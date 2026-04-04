@@ -69,10 +69,14 @@ class SyncService:
                     module_data.installed_version or ""
                 )
                 
-                self.sync_repo.complete_job(
+                version_str = module_data.installed_version if module_data.installed_version else "N/A"
+                
+                # Create a new sync record for each module
+                self.sync_repo.create_module_record(
                     job_id=job_id,
+                    environment_id=env.id,
                     module_id=module.id,
-                    version_string=module_data.installed_version or "N/A",
+                    version_string=version_str,
                     version_components=version_components,
                     state=module_data.state,
                 )
@@ -81,6 +85,9 @@ class SyncService:
                 job.progress_percent = progress
                 self.db.commit()
 
+            # Mark job as completed
+            self.sync_repo.mark_job_completed(job_id)
+            self.db.commit()
             return True
 
         except Exception as e:
