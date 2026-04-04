@@ -471,3 +471,5 @@ This AGENTS.md covers:
 - ✅ Detailed 10-phase migration plan with task checklists
 - ✅ Phase verification criteria
 - ✅ Git commit standards
+
+Always use nohup when running a terminal
