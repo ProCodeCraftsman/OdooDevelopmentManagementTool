@@ -32,6 +32,7 @@ export function LoginPage() {
   const onSubmit = async (data: LoginForm) => {
     try {
       const response = await authApi.login(data);
+      
       login(response.access_token, {
         id: 0,
         username: data.username,
@@ -39,6 +40,10 @@ export function LoginPage() {
         is_active: true,
         is_admin: false,
       });
+      
+      const userProfile = await authApi.getMe();
+      
+      login(response.access_token, userProfile);
       toast.success("Login successful");
       navigate("/dashboard");
     } catch {
@@ -48,7 +53,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-[400px]">
         <CardHeader className="text-center space-y-1">
           <CardTitle className="text-2xl font-bold">Odoo Auditor</CardTitle>

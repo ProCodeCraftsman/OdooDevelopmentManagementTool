@@ -193,7 +193,7 @@ export function ComparisonPage() {
                       row.action && "bg-yellow-50/30"
                     )}
                   >
-                    <td className="sticky left-0 z-10 px-3 py-2 bg-white min-w-[150px]">
+                    <td className="sticky left-0 z-10 px-3 py-2 bg-background min-w-[150px]">
                       <div className="truncate max-w-[150px]" title={row.technical_name}>
                         <span className="font-medium text-sm">{row.technical_name}</span>
                         {row.module_name && (
