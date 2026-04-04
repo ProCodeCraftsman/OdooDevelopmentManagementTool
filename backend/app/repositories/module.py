@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import insert
+from sqlalchemy import insert, or_
 from sqlalchemy.orm import Session
 from app.models.module import Module
 from app.repositories.base import BaseRepository
@@ -11,6 +11,20 @@ class ModuleRepository(BaseRepository[Module]):
 
     def get_by_name(self, name: str) -> Optional[Module]:
         return self.db.query(Module).filter(Module.name == name).first()
+
+    def search(self, query: str, limit: int = 20) -> List[Module]:
+        search_pattern = f"%{query}%"
+        return (
+            self.db.query(Module)
+            .filter(
+                or_(
+                    Module.name.ilike(search_pattern),
+                    Module.shortdesc.ilike(search_pattern),
+                )
+            )
+            .limit(limit)
+            .all()
+        )
 
     def upsert(self, name: str, shortdesc: Optional[str] = None) -> Module:
         existing = self.get_by_name(name)
