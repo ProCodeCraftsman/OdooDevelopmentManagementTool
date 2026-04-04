@@ -77,8 +77,45 @@ class PriorityResponse(PriorityBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ControlParameterUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
 class ControlParametersResponse(BaseModel):
     request_types: List[RequestTypeResponse]
     request_states: List[RequestStateResponse]
     functional_categories: List[FunctionalCategoryResponse]
     priorities: List[PriorityResponse]
+
+
+class ControlParameterRuleBase(BaseModel):
+    request_state_name: str
+    allowed_type_categories: str = "ALL"
+    allowed_priorities: str = "ALL"
+    allowed_functional_categories: str = "ALL"
+    is_active: bool = True
+
+
+class ControlParameterRuleCreate(ControlParameterRuleBase):
+    pass
+
+
+class ControlParameterRuleUpdate(BaseModel):
+    request_state_name: Optional[str] = None
+    allowed_type_categories: Optional[str] = None
+    allowed_priorities: Optional[str] = None
+    allowed_functional_categories: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class ControlParameterRuleResponse(ControlParameterRuleBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ControlParameterRuleListResponse(BaseModel):
+    rules: List[ControlParameterRuleResponse]

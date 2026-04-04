@@ -5,11 +5,13 @@ from app.core.database import get_db
 from app.api.deps import get_current_user, get_current_admin_user
 from app.models.user import User
 from app.models.control_parameters import RequestType, RequestState, FunctionalCategory, Priority
+from app.models.control_parameter_rule import ControlParameterRule
 from app.repositories.request_type import RequestTypeRepository
 from app.repositories.request_state import RequestStateRepository
 from app.repositories.functional_category import FunctionalCategoryRepository
 from app.repositories.priority import PriorityRepository
 from app.repositories.development_request import DevelopmentRequestRepository
+from app.repositories.control_parameter_rule import ControlParameterRuleRepository
 from app.schemas.control_parameters import (
     ControlParametersResponse,
     RequestTypeCreate,
@@ -20,6 +22,11 @@ from app.schemas.control_parameters import (
     FunctionalCategoryResponse,
     PriorityCreate,
     PriorityResponse,
+    ControlParameterUpdate,
+    ControlParameterRuleCreate,
+    ControlParameterRuleUpdate,
+    ControlParameterRuleResponse,
+    ControlParameterRuleListResponse,
 )
 from app.schemas.development_request import (
     DevelopmentRequestCreate,
@@ -209,6 +216,127 @@ def restore_control_parameter(
         )
 
     return {"success": True, "message": "Parameter restored successfully"}
+
+
+@router.patch("/control-parameters/{param_type}/{id}")
+def update_control_parameter(
+    param_type: str,
+    id: int,
+    data: ControlParameterUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    repo, model = _get_repo_and_model(db, param_type)
+    obj = repo.get(id)
+    if not obj:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{param_type} with id {id} not found",
+        )
+
+    # Only allow updating name and description (category/level are not in the update schema)
+    if data.name is not None:
+        obj.name = data.name
+    if data.description is not None:
+        obj.description = data.description
+
+    db.commit()
+    db.refresh(obj)
+
+    # Return appropriate response based on param_type
+    if param_type == "request-types":
+        return RequestTypeResponse.model_validate(obj)
+    elif param_type == "request-states":
+        return RequestStateResponse.model_validate(obj)
+    elif param_type == "priorities":
+        return PriorityResponse.model_validate(obj)
+    else:
+        return FunctionalCategoryResponse.model_validate(obj)
+
+
+# Control Parameter Rules endpoints
+@router.get("/control-parameters/rules", response_model=ControlParameterRuleListResponse)
+def list_control_parameter_rules(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    repo = ControlParameterRuleRepository(db)
+    # Seed default rules on first call
+    repo.seed_default_rules()
+    rules = repo.get_all()
+    return ControlParameterRuleListResponse(rules=rules)
+
+
+@router.post("/control-parameters/rules", response_model=ControlParameterRuleResponse)
+def create_control_parameter_rule(
+    data: ControlParameterRuleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    repo = ControlParameterRuleRepository(db)
+    rule = repo.create(ControlParameterRule(**data.model_dump()))
+    return ControlParameterRuleResponse.model_validate(rule)
+
+
+@router.put("/control-parameters/rules/{rule_id}", response_model=ControlParameterRuleResponse)
+def update_control_parameter_rule(
+    rule_id: int,
+    data: ControlParameterRuleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    repo = ControlParameterRuleRepository(db)
+    rule = repo.get(rule_id)
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Rule with id {rule_id} not found",
+        )
+
+    # Update only provided fields
+    if data.request_state_name is not None:
+        rule.request_state_name = data.request_state_name
+    if data.allowed_type_categories is not None:
+        rule.allowed_type_categories = data.allowed_type_categories
+    if data.allowed_priorities is not None:
+        rule.allowed_priorities = data.allowed_priorities
+    if data.allowed_functional_categories is not None:
+        rule.allowed_functional_categories = data.allowed_functional_categories
+    if data.is_active is not None:
+        rule.is_active = data.is_active
+
+    rule = repo.update(rule)
+    return ControlParameterRuleResponse.model_validate(rule)
+
+
+@router.delete("/control-parameters/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_control_parameter_rule(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    repo = ControlParameterRuleRepository(db)
+    if not repo.delete(rule_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Rule with id {rule_id} not found",
+        )
+
+
+@router.post("/control-parameters/rules/{rule_id}/toggle", response_model=ControlParameterRuleResponse)
+def toggle_control_parameter_rule(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+):
+    repo = ControlParameterRuleRepository(db)
+    rule = repo.toggle_active(rule_id)
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Rule with id {rule_id} not found",
+        )
+    return ControlParameterRuleResponse.model_validate(rule)
 
 
 @router.post("/requests/", response_model=DevelopmentRequestResponse)

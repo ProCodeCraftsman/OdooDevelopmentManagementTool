@@ -3,7 +3,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.development_request import DevelopmentRequest
-from app.models.control_parameters import RequestType, RequestState
+from app.models.control_parameters import RequestType, RequestState, Priority, FunctionalCategory, Priority, FunctionalCategory
 from app.models.environment import Environment
 from app.models.module import Module
 from app.models.sync_record import SyncRecord
@@ -12,6 +12,7 @@ from app.repositories.request_module_line import RequestModuleLineRepository
 from app.repositories.request_release_plan_line import RequestReleasePlanLineRepository
 from app.repositories.request_type import RequestTypeRepository
 from app.repositories.request_state import RequestStateRepository
+from app.repositories.control_parameter_rule import ControlParameterRuleRepository
 from app.core.security_matrix import SecurityMatrixEngine, StateCategory
 
 
@@ -29,7 +30,64 @@ class DevelopmentRequestService:
         self.release_plan_repo = RequestReleasePlanLineRepository(db)
         self.request_type_repo = RequestTypeRepository(db)
         self.request_state_repo = RequestStateRepository(db)
+        self.rule_repo = ControlParameterRuleRepository(db)
         self.security = SecurityMatrixEngine
+
+    def _check_control_parameter_rules(
+        self,
+        request_type: RequestType,
+        request_state: RequestState,
+        priority_id: int,
+        functional_category_id: int,
+    ) -> None:
+        """Validate request against control parameter rules."""
+        # Get active rules
+        active_rules = self.rule_repo.get_active()
+        if not active_rules:
+            return  # No rules configured, allow all
+
+        # Find applicable rule for the target state
+        matching_rule = None
+        for rule in active_rules:
+            if rule.request_state_name == request_state.name:
+                matching_rule = rule
+                break
+
+        if not matching_rule:
+            # No rule for this state, allow
+            return
+
+        # Check request type category
+        type_categories = matching_rule.allowed_type_categories
+        if type_categories != "ALL":
+            allowed_categories = [c.strip() for c in type_categories.split(",")]
+            if request_type.category not in allowed_categories:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Request type '{request_type.category}' is not allowed for state '{request_state.name}'. Allowed categories: {type_categories}",
+                )
+
+        # Check priority
+        priorities = matching_rule.allowed_priorities
+        if priorities != "ALL":
+            allowed_priorities = [p.strip() for p in priorities.split(",")]
+            priority_obj = self.db.query(Priority).filter(Priority.id == priority_id).first()
+            if priority_obj and str(priority_obj.level) not in allowed_priorities:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Priority level {priority_obj.level} is not allowed for state '{request_state.name}'. Allowed priorities: {priorities}",
+                )
+
+        # Check functional category
+        categories = matching_rule.allowed_functional_categories
+        if categories != "ALL":
+            allowed_categories = [c.strip() for c in categories.split(",")]
+            func_cat = self.db.query(FunctionalCategory).filter(FunctionalCategory.id == functional_category_id).first()
+            if func_cat and func_cat.name not in allowed_categories:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Functional category '{func_cat.name}' is not allowed for state '{request_state.name}'. Allowed categories: {categories}",
+                )
 
     def validate_intra_parameter_rules(self, data: dict, is_update: bool = False) -> None:
         request_type_id = data.get("request_type_id")

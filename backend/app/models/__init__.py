@@ -15,6 +15,7 @@ from app.models.control_parameters import (
     FunctionalCategory,
     Priority,
 )
+from app.models.control_parameter_rule import ControlParameterRule
 
 __all__ = [
     "Base",
@@ -31,4 +32,5 @@ __all__ = [
     "RequestState",
     "FunctionalCategory",
     "Priority",
+    "ControlParameterRule",
 ]
