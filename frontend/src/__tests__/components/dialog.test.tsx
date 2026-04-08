@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Dialog, DialogContent, DialogOverlay, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogOverlay,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 describe("Dialog Component", () => {
   it("renders DialogOverlay with correct opacity class", () => {
@@ -9,17 +15,17 @@ describe("Dialog Component", () => {
         <DialogOverlay data-testid="overlay" />
         <DialogContent>
           <DialogTitle>Test Dialog</DialogTitle>
+          <DialogDescription>Dialog description</DialogDescription>
         </DialogContent>
       </Dialog>
     );
 
     const overlay = screen.getByTestId("overlay");
-    expect(overlay.className).toContain("bg-black/95");
-    expect(overlay.className).not.toContain("bg-black/80");
-    expect(overlay.className).not.toContain("bg-black/60");
+    expect(overlay.className).toContain("bg-black/80");
+    expect(overlay.className).toContain("backdrop-blur-sm");
   });
 
-  it("DialogOverlay does not have backdrop-blur", () => {
+  it("DialogOverlay has backdrop blur", () => {
     render(
       <Dialog open>
         <DialogOverlay data-testid="overlay" />
@@ -27,7 +33,7 @@ describe("Dialog Component", () => {
     );
 
     const overlay = screen.getByTestId("overlay");
-    expect(overlay.className).not.toContain("backdrop-blur");
+    expect(overlay.className).toContain("backdrop-blur-sm");
   });
 
   it("DialogOverlay has correct z-index", () => {

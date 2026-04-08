@@ -27,10 +27,12 @@ from app.schemas.release_plan import (
 from app.core.security_matrix import SecurityMatrixEngine, Permission
 
 # Macro state categories for release plans
-MACRO_OPEN = "Open"
-MACRO_IN_PROGRESS = "In Progress"
+MACRO_DRAFT = "Draft"
+MACRO_PLANNED = "Planned"
+MACRO_APPROVED = "Approved"
+MACRO_EXECUTING = "Executing"
 MACRO_CLOSED = "Closed"
-MACRO_FAILED = "Failed/Cancelled"
+MACRO_FAILED = "Failed"
 
 # UAT status values for production gate check
 UAT_STATUS_CLOSED = "Closed"
@@ -106,7 +108,7 @@ class ReleasePlanService:
         return s
 
     def _macro_state(self, plan: ReleasePlan) -> str:
-        return plan.state.category if plan.state else MACRO_OPEN
+        return plan.state.category if plan.state else MACRO_DRAFT
 
     def _check_create_permission(self, user: User) -> None:
         if not SecurityMatrixEngine.has_permission(user, Permission.RELEASE_PLAN_CREATE):
@@ -200,7 +202,7 @@ class ReleasePlanService:
         Pre-flight check: refreshes versions and blocks on No Action, regression, uninstalled.
         """
         new_macro = new_state.category
-        if new_macro not in [MACRO_IN_PROGRESS, MACRO_CLOSED]:
+        if new_macro not in [MACRO_EXECUTING, MACRO_CLOSED]:
             return
 
         target_env = plan.target_environment
@@ -431,7 +433,7 @@ class ReleasePlanService:
             )
         plan = self._get_plan_or_404(plan_id)
         macro = self._macro_state(plan)
-        if macro in [MACRO_IN_PROGRESS, MACRO_CLOSED]:
+        if macro in [MACRO_EXECUTING, MACRO_CLOSED]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot delete an in-progress or closed release plan.",
@@ -447,7 +449,7 @@ class ReleasePlanService:
         self, module_technical_name: str, module_version: Optional[str],
         target_environment_id: int, exclude_plan_id: int
     ) -> bool:
-        """Return True if the same module+version is already in another Open/In Progress plan
+        """Return True if the same module+version is already in another active plan
         targeting the same environment."""
         q = (
             self.db.query(ReleasePlanLine)
@@ -457,7 +459,9 @@ class ReleasePlanService:
                 ReleasePlanLine.module_technical_name == module_technical_name,
                 ReleasePlan.target_environment_id == target_environment_id,
                 ReleasePlan.id != exclude_plan_id,
-                ReleasePlanState.category.in_([MACRO_OPEN, MACRO_IN_PROGRESS]),
+                ReleasePlanState.category.in_(
+                    [MACRO_DRAFT, MACRO_PLANNED, MACRO_APPROVED, MACRO_EXECUTING]
+                ),
             )
         )
         if module_version:
@@ -471,7 +475,7 @@ class ReleasePlanService:
           1. DR state must be "In Progress"
           2. UAT gate (Production target only: ml.uat_status == 'Closed')
           3. Comparison gate: live drift action must not be "No Action"
-          4. Active plan lock: same module+version not in another Open/In Progress plan
+          4. Active plan lock: same module+version not in another active plan
              targeting same target environment
           5. Already in this plan
         """
@@ -540,7 +544,7 @@ class ReleasePlanService:
                 ml.module_technical_name, ml.module_version, plan.target_environment_id, plan_id
             ):
                 is_eligible = False
-                disable_reason = "Already in another Open/In Progress Release Plan for this environment"
+                disable_reason = "Already in another active Release Plan for this environment"
 
             results.append({
                 "id": ml.id,
@@ -572,10 +576,10 @@ class ReleasePlanService:
         self._check_modify_permission(user, plan)
 
         macro = self._macro_state(plan)
-        if macro != MACRO_OPEN:
+        if macro != MACRO_DRAFT:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Module lines can only be linked when the plan is Open (current: '{macro}').",
+                detail=f"Module lines can only be linked when the plan is Draft (current: '{macro}').",
             )
 
         target_env = plan.target_environment
@@ -739,10 +743,10 @@ class ReleasePlanService:
         self._check_modify_permission(user, plan)
 
         macro = self._macro_state(plan)
-        if macro != MACRO_OPEN:
+        if macro != MACRO_DRAFT:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Lines can only be unlinked when the plan is Open. Current: '{macro}'.",
+                detail=f"Lines can only be unlinked when the plan is Draft. Current: '{macro}'.",
             )
 
         line = self.line_repo.get(line_id)
@@ -759,7 +763,7 @@ class ReleasePlanService:
         can_create = has(Permission.RELEASE_PLAN_CREATE)
         can_modify = has(Permission.RELEASE_PLAN_UPDATE)
         can_delete = has(Permission.RELEASE_PLAN_DELETE)
-        can_manage_lines = can_modify and macro in [MACRO_OPEN, MACRO_IN_PROGRESS]
+        can_manage_lines = can_modify and macro in [MACRO_DRAFT, MACRO_PLANNED]
         can_transition_state = can_modify
         can_approve = has(Permission.RELEASE_PLAN_APPROVE)
         can_deploy = has(Permission.SYNC_TRIGGER)

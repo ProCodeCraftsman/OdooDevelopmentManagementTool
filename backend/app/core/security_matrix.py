@@ -52,9 +52,11 @@ class Permission:
 # State category helpers (used by service layer for state-aware enforcement)
 # ---------------------------------------------------------------------------
 class StateCategory:
-    OPEN = "Open"
+    DRAFT = "Draft"
     IN_PROGRESS = "In Progress"
-    CLOSED = "Closed"
+    READY = "Ready"
+    DONE = "Done"
+    CANCELLED = "Cancelled"
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +68,7 @@ class SecurityMatrixEngine:
 
     get_permissions_payload() returns booleans derived solely from the user's
     role.permissions array — no role-level or state-level logic here.
-    State-aware enforcement (e.g., blocking edits in Closed state) lives in
+    State-aware enforcement (e.g., blocking edits in final states) lives in
     the service layer.
     """
 
@@ -101,17 +103,19 @@ class SecurityMatrixEngine:
         has = lambda p: cls.has_permission(user, p)  # noqa: E731
 
         can_update = has(Permission.DEV_REQUEST_UPDATE)
+        can_manage_system = has(Permission.SYSTEM_MANAGE)
         can_add_lines = has(Permission.DEV_REQUEST_LINE_CREATE)
         can_edit_lines = has(Permission.DEV_REQUEST_LINE_UPDATE)
+        top_role = min((user.roles or []), key=lambda role: role.priority, default=None)
 
         return {
             # Header CRUD
             "can_update": can_update,
-            "can_edit_request_type": can_update,
+            "can_edit_request_type": can_manage_system,
             "can_edit_description": can_update,
-            "can_edit_functional_category": can_update,
-            "can_edit_priority": can_update,
-            "can_edit_assigned_developer": can_update,
+            "can_edit_functional_category": can_manage_system,
+            "can_edit_priority": can_manage_system,
+            "can_edit_assigned_developer": can_manage_system,
             # State transitions
             "can_edit_state": has(Permission.DEV_REQUEST_STATE_CHANGE),
             "can_reopen": has(Permission.DEV_REQUEST_REOPEN),
@@ -126,7 +130,8 @@ class SecurityMatrixEngine:
             "can_create_attachments": has(Permission.ATTACHMENTS_CREATE),
             "can_delete_attachments": has(Permission.ATTACHMENTS_DELETE),
             # Management
-            "can_manage_system": has(Permission.SYSTEM_MANAGE),
+            "can_manage_system": can_manage_system,
+            "current_role_level": top_role.priority if top_role else 0,
         }
 
     # ------------------------------------------------------------------
@@ -135,8 +140,8 @@ class SecurityMatrixEngine:
 
     @classmethod
     def can_edit_in_state(cls, user: "User", state_category: str) -> bool:
-        """Global update permission gated on state — Closed blocks non-admins."""
-        if state_category == StateCategory.CLOSED:
+        """Global update permission gated on final states."""
+        if state_category in {StateCategory.DONE, StateCategory.CANCELLED}:
             return cls.has_permission(user, Permission.SYSTEM_MANAGE)
         return cls.has_permission(user, Permission.DEV_REQUEST_UPDATE)
 
@@ -160,8 +165,8 @@ class SecurityMatrixEngine:
         Returns (allowed_fields, rejected_fields).
 
         Rules:
-        - Closed state: only system:manage users can write anything.
-        - Open / In Progress: dev_request:update covers header fields.
+        - Done/Cancelled states: only system:manage users can write anything.
+        - Draft / In Progress / Ready: dev_request:update covers header fields.
           dev_request_line:* are handled separately by line endpoints.
           uat:update covers uat_request_id.
           comments:create covers comments.
@@ -170,19 +175,28 @@ class SecurityMatrixEngine:
         rejected: list[str] = []
 
         header_writable = cls.can_edit_in_state(user, current_state_category)
+        system_writable = cls.has_permission(user, Permission.SYSTEM_MANAGE)
         can_uat = cls.has_permission(user, Permission.UAT_UPDATE)
         can_comment = cls.has_permission(user, Permission.COMMENTS_CREATE)
 
-        _header_fields = {
-            "title", "request_type_id", "description", "functional_category_id",
-            "priority_id", "assigned_developer_id",
+        _general_header_fields = {"title", "description"}
+        _restricted_header_fields = {
+            "request_type_id",
+            "functional_category_id",
+            "priority_id",
+            "assigned_developer_id",
         }
         _uat_fields = {"uat_request_id"}
         _comment_fields = {"comments"}
 
         for field, value in update_data.items():
-            if field in _header_fields:
+            if field in _general_header_fields:
                 if header_writable:
+                    allowed[field] = value
+                else:
+                    rejected.append(field)
+            elif field in _restricted_header_fields:
+                if system_writable and header_writable:
                     allowed[field] = value
                 else:
                     rejected.append(field)

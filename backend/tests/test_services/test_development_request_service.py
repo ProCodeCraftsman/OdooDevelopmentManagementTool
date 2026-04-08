@@ -5,9 +5,10 @@ from app.services.development_request_service import DevelopmentRequestService
 
 
 class MockRequestType:
-    def __init__(self, id: int, category: str):
+    def __init__(self, id: int, category: str, name: str = "Mock Type"):
         self.id = id
         self.category = category
+        self.name = name
 
 
 class MockRequestState:
@@ -28,14 +29,17 @@ class MockUser:
 
 
 class TestIntraParameterValidation:
-    def test_non_development_cannot_transition_to_testing_state(self):
+    def test_disallowed_state_type_combination_is_rejected(self):
         service = DevelopmentRequestService(MagicMock())
         service.request_type_repo = MagicMock()
-        service.request_type_repo.get.return_value = MockRequestType(1, "Non Development")
+        service.request_type_repo.get.return_value = MockRequestType(1, "Non-development")
         service.request_state_repo = MagicMock()
         service.request_state_repo.get.return_value = MockRequestState(
-            5, "In Progress - Testing (Dev)"
+            5, "Ready - QA Signoff"
         )
+        service.rule_repo = MagicMock()
+        service.rule_repo.seed_default_rules.return_value = None
+        service.rule_repo.is_allowed.return_value = False
 
         with pytest.raises(HTTPException) as exc_info:
             service.validate_intra_parameter_rules(
@@ -43,37 +47,23 @@ class TestIntraParameterValidation:
             )
 
         assert exc_info.value.status_code == 400
-        assert "Non Development" in str(exc_info.value.detail)
+        assert "not allowed" in str(exc_info.value.detail)
 
-    def test_non_development_cannot_transition_to_staging_state(self):
+    def test_allowed_state_type_combination_passes(self):
         service = DevelopmentRequestService(MagicMock())
         service.request_type_repo = MagicMock()
-        service.request_type_repo.get.return_value = MockRequestType(1, "Non Development")
+        service.request_type_repo.get.return_value = MockRequestType(1, "Non-development")
         service.request_state_repo = MagicMock()
         service.request_state_repo.get.return_value = MockRequestState(
-            6, "In Progress - Deployed to Staging"
+            6, "Ready - Business Validation"
         )
+        service.rule_repo = MagicMock()
+        service.rule_repo.seed_default_rules.return_value = None
+        service.rule_repo.is_allowed.return_value = True
 
-        with pytest.raises(HTTPException) as exc_info:
-            service.validate_intra_parameter_rules(
-                {"request_type_id": 1, "request_state_id": 6}
-            )
-
-        assert exc_info.value.status_code == 400
-
-    def test_non_development_cannot_transition_to_uat_state(self):
-        service = DevelopmentRequestService(MagicMock())
-        service.request_type_repo = MagicMock()
-        service.request_type_repo.get.return_value = MockRequestType(1, "Non Development")
-        service.request_state_repo = MagicMock()
-        service.request_state_repo.get.return_value = MockRequestState(7, "In Progress - UAT")
-
-        with pytest.raises(HTTPException) as exc_info:
-            service.validate_intra_parameter_rules(
-                {"request_type_id": 1, "request_state_id": 7}
-            )
-
-        assert exc_info.value.status_code == 400
+        service.validate_intra_parameter_rules(
+            {"request_type_id": 1, "request_state_id": 6}
+        )
 
     def test_development_type_requires_developer_assignment(self):
         service = DevelopmentRequestService(MagicMock())
@@ -90,9 +80,14 @@ class TestIntraParameterValidation:
         service = DevelopmentRequestService(MagicMock())
         service.request_type_repo = MagicMock()
         service.request_type_repo.get.return_value = MockRequestType(1, "Development")
+        service.request_state_repo = MagicMock()
+        service.request_state_repo.get.return_value = MockRequestState(1, "Draft - Under Review")
+        service.rule_repo = MagicMock()
+        service.rule_repo.seed_default_rules.return_value = None
+        service.rule_repo.is_allowed.return_value = True
 
         service.validate_intra_parameter_rules(
-            {"request_type_id": 1, "assigned_developer_id": 5}
+            {"request_type_id": 1, "request_state_id": 1, "assigned_developer_id": 5}
         )
 
     def test_development_type_raises_for_invalid_request_type(self):

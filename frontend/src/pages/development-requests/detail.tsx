@@ -60,9 +60,11 @@ import { toast } from "sonner";
 
 function getStateColor(category: string): string {
   switch (category?.toLowerCase()) {
-    case "open": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+    case "draft": return "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300";
     case "in progress": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
-    case "closed": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    case "ready": return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300";
+    case "done": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    case "cancelled": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
     default: return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
   }
 }
@@ -245,6 +247,15 @@ export function DevelopmentRequestsDetailPage() {
   } = useForm<EditFormData>({
     resolver: zodResolver(editSchema),
   });
+  const selectedRequestTypeId = watch("request_type_id");
+  const allowedStateIds = new Set(
+    (controlParams?.state_type_rules ?? [])
+      .filter((rule) => rule.is_active && rule.request_type_id === selectedRequestTypeId)
+      .map((rule) => rule.request_state_id)
+  );
+  const availableStates = (controlParams?.request_states ?? []).filter(
+    (state) => allowedStateIds.size === 0 || allowedStateIds.has(state.id)
+  );
 
   // Populate form whenever the request loads or edit mode is toggled on
   useEffect(() => {
@@ -302,7 +313,9 @@ export function DevelopmentRequestsDetailPage() {
   const canEditAssignee = request.permissions?.can_edit_assigned_developer ?? false;
   const canEditDescription = request.permissions?.can_edit_description ?? false;
   const isAdmin = request.permissions?.can_manage_system ?? false;
-  const isClosed = request.request_state?.category?.toLowerCase() === "closed";
+  const isClosed = ["done", "cancelled"].includes(
+    request.request_state?.category?.toLowerCase() || ""
+  );
   const isArchived = request.is_archived;
 
   // ---------------------------------------------------------------------------
@@ -846,7 +859,7 @@ export function DevelopmentRequestsDetailPage() {
                             <SelectValue placeholder="Select state" />
                           </SelectTrigger>
                           <SelectContent>
-                            {controlParams?.request_states.map((s) => (
+                            {availableStates.map((s) => (
                               <SelectItem key={s.id} value={s.id.toString()}>
                                 {s.name}
                               </SelectItem>
@@ -936,7 +949,7 @@ export function DevelopmentRequestsDetailPage() {
                       />
                       {isClosed && (
                         <p className="text-xs text-muted-foreground">
-                          Disabled — request is in a closed state.
+                          Disabled — request is in a final state.
                         </p>
                       )}
                     </div>
@@ -1146,9 +1159,9 @@ export function DevelopmentRequestsDetailPage() {
               <div className="flex gap-3">
                 <Archive className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
                 <div className="text-sm text-yellow-800 dark:text-yellow-300">
-                  <p className="font-medium">Requires Cancelled/Rejected state</p>
+                  <p className="font-medium">Requires Cancelled state</p>
                   <p className="mt-1">
-                    Request must be in a Cancelled or Rejected state and must not be
+                    Request must be in a Cancelled state and must not be
                     linked to any active Release Plans. Child requests will also be archived.
                   </p>
                 </div>
@@ -1184,10 +1197,12 @@ export function DevelopmentRequestsDetailPage() {
 // ─── Linked Release Plans Tab ─────────────────────────────────────────────────
 
 const PLAN_STATE_COLORS: Record<string, string> = {
-  Open: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  "In Progress": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+  Draft: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300",
+  Planned: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  Approved: "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
+  Executing: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
   Closed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  "Failed/Cancelled": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  Failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
 };
 
 function LinkedReleasePlansTab({ requestId }: { requestId: number }) {

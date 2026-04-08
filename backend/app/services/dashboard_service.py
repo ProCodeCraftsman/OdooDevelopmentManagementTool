@@ -65,7 +65,7 @@ def get_summary(db: Session) -> DashboardSummaryResponse:
         .scalar() or 0
     )
 
-    # Active = Open + In Progress state category
+    # Active = Draft + In Progress + Ready state category
     active_dev = (
         db.query(func.count(DevelopmentRequest.id))
         .join(RequestType, DevelopmentRequest.request_type_id == RequestType.id)
@@ -73,12 +73,12 @@ def get_summary(db: Session) -> DashboardSummaryResponse:
         .filter(
             RequestType.category == "Development",
             DevelopmentRequest.is_archived.is_(False),
-            RequestState.category.in_(["Open", "In Progress"]),
+            RequestState.category.in_(["Draft", "In Progress", "Ready"]),
         )
         .scalar() or 0
     )
 
-    # Closed Development requests
+    # Completed Development requests
     closed_dev = (
         db.query(func.count(DevelopmentRequest.id))
         .join(RequestType, DevelopmentRequest.request_type_id == RequestType.id)
@@ -86,7 +86,7 @@ def get_summary(db: Session) -> DashboardSummaryResponse:
         .filter(
             RequestType.category == "Development",
             DevelopmentRequest.is_archived.is_(False),
-            RequestState.category == "Closed",
+            RequestState.category == "Done",
         )
         .scalar() or 0
     )
@@ -106,7 +106,7 @@ def get_summary(db: Session) -> DashboardSummaryResponse:
     active_plans_q = (
         db.query(ReleasePlan)
         .join(ReleasePlanState, ReleasePlan.state_id == ReleasePlanState.id)
-        .filter(ReleasePlanState.category.in_(["Open", "In Progress"]))
+        .filter(ReleasePlanState.category.in_(["Draft", "Planned", "Approved", "Executing"]))
     )
     active_plan_count = active_plans_q.count()
 
@@ -232,7 +232,7 @@ def _compute_workload_matrix(db: Session) -> List[WorkloadRow]:
         .filter(
             RequestType.category == "Development",
             DevelopmentRequest.is_archived.is_(False),
-            RequestState.category.in_(["Open", "In Progress", "Closed"]),
+            RequestState.category.in_(["Draft", "In Progress", "Ready", "Done"]),
         )
         .group_by(DevelopmentRequest.assigned_developer_id, RequestState.category)
         .all()
@@ -253,7 +253,7 @@ def _compute_workload_matrix(db: Session) -> List[WorkloadRow]:
     for row in rows:
         dev_name = users.get(row.assigned_developer_id, "Unassigned") if row.assigned_developer_id else "Unassigned"
         if dev_name not in matrix:
-            matrix[dev_name] = {"Open": 0, "In Progress": 0, "Closed": 0}
+            matrix[dev_name] = {"Draft": 0, "In Progress": 0, "Ready": 0, "Done": 0}
         matrix[dev_name][row.category] = row.cnt
 
     # Ensure "Unassigned" is always present last
@@ -261,9 +261,9 @@ def _compute_workload_matrix(db: Session) -> List[WorkloadRow]:
     for dev, counts in sorted(matrix.items(), key=lambda x: (x[0] == "Unassigned", x[0])):
         result.append(WorkloadRow(
             developer=dev,
-            open=counts.get("Open", 0),
+            open=counts.get("Draft", 0),
             in_progress=counts.get("In Progress", 0),
-            closed=counts.get("Closed", 0),
+            closed=counts.get("Done", 0),
         ))
     return result
 
@@ -278,13 +278,13 @@ def _compute_pipeline_distribution(db: Session) -> List[PipelineDistributionItem
         .filter(
             RequestType.category == "Development",
             DevelopmentRequest.is_archived.is_(False),
-            RequestState.category.in_(["Open", "In Progress", "Closed"]),
+            RequestState.category.in_(["Draft", "In Progress", "Ready", "Done"]),
         )
         .group_by(RequestState.category)
         .all()
     )
 
-    order = ["Open", "In Progress", "Closed"]
+    order = ["Draft", "In Progress", "Ready", "Done"]
     counts = {r.category: r.cnt for r in rows}
     return [
         PipelineDistributionItem(category=cat, count=counts.get(cat, 0))

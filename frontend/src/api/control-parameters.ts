@@ -18,11 +18,14 @@ export interface ControlParameterCreate {
   description?: string;
   category?: string;
   level?: number;
+  display_order?: number;
 }
 
 export interface ControlParameterUpdate {
   name?: string;
   description?: string;
+  category?: string;
+  display_order?: number;
 }
 
 const PARAM_TYPE_MAP: Record<string, string> = {
@@ -77,31 +80,28 @@ export const controlParametersApi = {
   },
 };
 
-// Control Parameter Rules API
 export interface ControlParameterRule {
   id: number;
+  request_state_id: number;
+  request_type_id: number;
   request_state_name: string;
-  allowed_type_categories: string;
-  allowed_priorities: string;
-  allowed_functional_categories: string;
+  request_state_category: string;
+  request_type_name: string;
+  request_type_category: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface ControlParameterRuleCreate {
-  request_state_name: string;
-  allowed_type_categories?: string;
-  allowed_priorities?: string;
-  allowed_functional_categories?: string;
+  request_state_id: number;
+  request_type_id: number;
   is_active?: boolean;
 }
 
 export interface ControlParameterRuleUpdate {
-  request_state_name?: string;
-  allowed_type_categories?: string;
-  allowed_priorities?: string;
-  allowed_functional_categories?: string;
+  request_state_id?: number;
+  request_type_id?: number;
   is_active?: boolean;
 }
 

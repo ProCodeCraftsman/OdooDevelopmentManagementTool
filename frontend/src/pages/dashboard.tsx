@@ -44,9 +44,10 @@ import { cn } from "@/lib/utils";
 // ─── Colour palettes ──────────────────────────────────────────────────────────
 
 const PIPELINE_COLORS: Record<string, string> = {
-  Open: "#f59e0b",
+  Draft: "#64748b",
   "In Progress": "#3b82f6",
-  Closed: "#22c55e",
+  Ready: "#06b6d4",
+  Done: "#22c55e",
 };
 
 const UAT_COLORS = ["#3b82f6", "#f59e0b", "#22c55e", "#ef4444", "#94a3b8"];
@@ -145,7 +146,7 @@ function CommandCenterTab({ onDriftClick }: { onDriftClick: () => void }) {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{d.pending_uat}</div>
-            <p className="text-xs text-muted-foreground mt-1">Open or In Progress lines</p>
+            <p className="text-xs text-muted-foreground mt-1">Draft, In Progress, or Ready lines</p>
           </CardContent>
         </Card>
 
@@ -231,7 +232,7 @@ function CommandCenterTab({ onDriftClick }: { onDriftClick: () => void }) {
                     <TableHead className="text-center">
                       <span className="inline-flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full bg-amber-400 inline-block" />
-                        Open
+                        Draft
                       </span>
                     </TableHead>
                     <TableHead className="text-center">
@@ -243,7 +244,7 @@ function CommandCenterTab({ onDriftClick }: { onDriftClick: () => void }) {
                     <TableHead className="text-center">
                       <span className="inline-flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full bg-green-400 inline-block" />
-                        Closed
+                        Done
                       </span>
                     </TableHead>
                     <TableHead className="text-center pr-6">Total</TableHead>

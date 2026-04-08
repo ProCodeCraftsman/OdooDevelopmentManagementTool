@@ -323,7 +323,7 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
 
         open_state = (
             self.db.query(RequestState)
-            .filter(RequestState.category == "Open", RequestState.is_active == True)
+            .filter(RequestState.category == "Draft", RequestState.is_active == True)
             .order_by(RequestState.display_order)
             .first()
         )
@@ -344,10 +344,10 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
         closed_state = (
             self.db.query(RequestState)
             .filter(
-                RequestState.category == "Closed",
-                RequestState.name == "Closed - Released",
+                RequestState.category == "Done",
                 RequestState.is_active == True,
             )
+            .order_by(RequestState.display_order)
             .first()
         )
 

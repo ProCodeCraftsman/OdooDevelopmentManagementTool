@@ -27,13 +27,15 @@ describe("Control Parameters Page", () => {
     expect(screen.getByRole("heading", { name: "Control Parameters" })).toBeInTheDocument();
   });
 
-  it("renders all four tabs", async () => {
+  it("renders workflow settings tabs", async () => {
     render(<SettingsControlParametersPage />, { wrapper });
 
-    expect(screen.getByRole("tab", { name: "Request Types" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Request States" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Priorities" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Categories" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "DR Request Types" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "DR Request States" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "DR Priorities" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "DR Functional Categories" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "DR State-Type Rules" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Release Plan States" })).toBeInTheDocument();
   });
 
   it("renders the Show Archived toggle", async () => {
@@ -52,7 +54,7 @@ describe("Control Parameters Page", () => {
   it("clicking on a tab changes the selected tab", async () => {
     render(<SettingsControlParametersPage />, { wrapper });
 
-    const prioritiesTab = screen.getByRole("tab", { name: "Priorities" });
+    const prioritiesTab = screen.getByRole("tab", { name: "DR Priorities" });
     await userEvent.click(prioritiesTab);
 
     expect(prioritiesTab).toHaveAttribute("data-state", "active");

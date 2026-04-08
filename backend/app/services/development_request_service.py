@@ -11,11 +11,13 @@ from app.models.environment import Environment
 from app.models.module import Module
 from app.models.sync_record import SyncRecord
 from app.repositories.development_request import DevelopmentRequestRepository
+from app.repositories.development_request_state_type_rule import (
+    DevelopmentRequestStateTypeRuleRepository,
+)
 from app.repositories.request_module_line import RequestModuleLineRepository
 from app.repositories.request_release_plan_line import RequestReleasePlanLineRepository
 from app.repositories.request_type import RequestTypeRepository
 from app.repositories.request_state import RequestStateRepository
-from app.repositories.control_parameter_rule import ControlParameterRuleRepository
 from app.core.security_matrix import SecurityMatrixEngine, StateCategory
 from app.services.audit_log_service import (
     write_audit_log,
@@ -26,11 +28,8 @@ from app.services.audit_log_service import (
 
 
 class DevelopmentRequestService:
-    FORBIDDEN_STATES_FOR_NON_DEV = [
-        "In Progress - Testing (Dev)",
-        "In Progress - Deployed to Staging",
-        "In Progress - UAT",
-    ]
+    ACTIVE_RELEASE_PLAN_CATEGORIES = ["Draft", "Planned", "Approved", "Executing"]
+    LOCKED_RELEASE_PLAN_CATEGORIES = ["Executing", "Closed"]
 
     def __init__(self, db: Session):
         self.db = db
@@ -39,72 +38,30 @@ class DevelopmentRequestService:
         self.release_plan_repo = RequestReleasePlanLineRepository(db)
         self.request_type_repo = RequestTypeRepository(db)
         self.request_state_repo = RequestStateRepository(db)
-        self.rule_repo = ControlParameterRuleRepository(db)
+        self.rule_repo = DevelopmentRequestStateTypeRuleRepository(db)
         self.security = SecurityMatrixEngine
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _check_control_parameter_rules(
+    def _validate_state_type_rule(
         self,
         request_type: RequestType,
         request_state: RequestState,
-        priority_id: int,
-        functional_category_id: int,
     ) -> None:
-        active_rules = self.rule_repo.get_active()
-        if not active_rules:
-            return
-
-        matching_rule = next(
-            (r for r in active_rules if r.request_state_name == request_state.name),
-            None,
-        )
-        if not matching_rule:
-            return
-
-        type_categories = matching_rule.allowed_type_categories
-        if type_categories != "ALL":
-            allowed = [c.strip() for c in type_categories.split(",")]
-            if request_type.category not in allowed:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"Request type '{request_type.category}' is not allowed for state "
-                        f"'{request_state.name}'. Allowed: {type_categories}"
-                    ),
-                )
-
-        priorities = matching_rule.allowed_priorities
-        if priorities != "ALL":
-            allowed = [p.strip() for p in priorities.split(",")]
-            priority_obj = self.db.query(Priority).filter(Priority.id == priority_id).first()
-            if priority_obj and str(priority_obj.level) not in allowed:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"Priority level {priority_obj.level} is not allowed for state "
-                        f"'{request_state.name}'. Allowed: {priorities}"
-                    ),
-                )
-
-        categories = matching_rule.allowed_functional_categories
-        if categories != "ALL":
-            allowed = [c.strip() for c in categories.split(",")]
-            func_cat = (
-                self.db.query(FunctionalCategory)
-                .filter(FunctionalCategory.id == functional_category_id)
-                .first()
+        self.rule_repo.seed_default_rules()
+        if not self.rule_repo.is_allowed(request_state.id, request_type.id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Request type '{request_type.name}' is not allowed for "
+                    f"state '{request_state.name}'"
+                ),
             )
-            if func_cat and func_cat.name not in allowed:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"Functional category '{func_cat.name}' is not allowed for state "
-                        f"'{request_state.name}'. Allowed: {categories}"
-                    ),
-                )
+
+    def _is_request_final_state(self, state_category: Optional[str]) -> bool:
+        return state_category in [StateCategory.DONE, StateCategory.CANCELLED]
 
     def _detect_parent_cycle(self, request_id: int, new_parent_id: int) -> bool:
         visited: set = set()
@@ -120,7 +77,7 @@ class DevelopmentRequestService:
         return False
 
     def _is_module_in_active_release_plan(self, module_technical_name: str) -> bool:
-        """Return True if the module appears in any Release Plan with an Open/In-Progress state."""
+        """Return True if the module appears in any active Release Plan."""
         from app.models.release_plan import ReleasePlan, ReleasePlanLine
         from app.models.control_parameters.release_plan_state import ReleasePlanState
 
@@ -130,7 +87,7 @@ class DevelopmentRequestService:
             .join(ReleasePlanState, ReleasePlan.state_id == ReleasePlanState.id)
             .filter(
                 ReleasePlanLine.module_technical_name == module_technical_name,
-                ReleasePlanState.category.in_(["Open", "In Progress"]),
+                ReleasePlanState.category.in_(self.ACTIVE_RELEASE_PLAN_CATEGORIES),
             )
             .count()
         )
@@ -147,7 +104,7 @@ class DevelopmentRequestService:
             .join(ReleasePlanState, ReleasePlan.state_id == ReleasePlanState.id)
             .filter(
                 ReleasePlanLine.development_request_id == request_id,
-                ReleasePlanState.category.in_(["Open", "In Progress"]),
+                ReleasePlanState.category.in_(self.ACTIVE_RELEASE_PLAN_CATEGORIES),
             )
             .count()
         )
@@ -169,16 +126,6 @@ class DevelopmentRequestService:
                 detail=f"Request type with id {request_type_id} not found",
             )
 
-        if request_type.category == "Non Development":
-            target_state_id = data.get("request_state_id")
-            if target_state_id:
-                target_state = self.request_state_repo.get(target_state_id)
-                if target_state and target_state.name in self.FORBIDDEN_STATES_FOR_NON_DEV:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Cannot transition Non Development request to '{target_state.name}' state",
-                    )
-
         if request_type.category == "Development":
             assigned_dev_id = data.get("assigned_developer_id")
             if not assigned_dev_id:
@@ -187,6 +134,16 @@ class DevelopmentRequestService:
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Assigned Developer is required for Development type requests",
                     )
+
+        request_state_id = data.get("request_state_id")
+        if request_state_id:
+            request_state = self.request_state_repo.get(request_state_id)
+            if not request_state:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Request state with id {request_state_id} not found",
+                )
+            self._validate_state_type_rule(request_type, request_state)
 
     def validate_reopen(self, request_id: int) -> None:
         if self.release_plan_repo.all_deployed_to_production(request_id):
@@ -224,12 +181,21 @@ class DevelopmentRequestService:
     # ------------------------------------------------------------------
 
     def create(self, user: User, data: dict) -> DevelopmentRequest:
-        self.validate_intra_parameter_rules(data)
-
         if not data.get("request_state_id"):
             open_state = self.get_default_open_state()
             if open_state:
                 data["request_state_id"] = open_state.id
+
+        self.validate_intra_parameter_rules(data)
+
+        request_type = self.request_type_repo.get(data["request_type_id"])
+        request_state = self.request_state_repo.get(data["request_state_id"])
+        if not request_type or not request_state:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid request type or request state",
+            )
+        self._validate_state_type_rule(request_type, request_state)
 
         # Stamp who created this record
         data["created_by_id"] = user.id
@@ -261,21 +227,23 @@ class DevelopmentRequestService:
         if "request_state_id" in allowed_data:
             new_state = self.request_state_repo.get(allowed_data["request_state_id"])
             if new_state:
-                self._check_control_parameter_rules(
-                    current.request_type,
-                    new_state,
-                    current.priority_id,
-                    current.functional_category_id,
-                )
+                request_type = current.request_type
+                if "request_type_id" in allowed_data:
+                    request_type = self.request_type_repo.get(allowed_data["request_type_id"])
+                if not request_type:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Target request type not found",
+                    )
+                self._validate_state_type_rule(request_type, new_state)
                 validate_data = {
-                    "request_type_id": current.request_type_id,
+                    "request_type_id": request_type.id,
                     "request_state_id": new_state.id,
                 }
                 self.validate_intra_parameter_rules(validate_data, is_update=True)
 
-                # DR Closed gate: Development type requires all DR lines to have uat_status='Closed'
-                if new_state.category == StateCategory.CLOSED:
-                    if current.request_type and current.request_type.category == "Development":
+                if new_state.category == StateCategory.DONE:
+                    if request_type.category == "Development":
                         unclosed = [
                             ml.module_technical_name
                             for ml in current.module_lines
@@ -291,9 +259,16 @@ class DevelopmentRequestService:
                             )
 
                 # Cancellation cascade
-                state_lower = new_state.name.lower()
-                if "cancel" in state_lower or "reject" in state_lower:
+                if new_state.category == StateCategory.CANCELLED:
                     self._handle_cancellation_cascade(request_id, new_state.name)
+        elif "request_type_id" in allowed_data:
+            new_type = self.request_type_repo.get(allowed_data["request_type_id"])
+            if not new_type:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Target request type not found",
+                )
+            self._validate_state_type_rule(new_type, current.request_state)
 
         if "parent_request_id" in allowed_data:
             new_parent_id = allowed_data["parent_request_id"]
@@ -397,10 +372,10 @@ class DevelopmentRequestService:
         if not new_state:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target state not found")
 
-        if "reject" not in new_state.name.lower():
+        if new_state.category != StateCategory.CANCELLED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="The reject endpoint may only target states with 'reject' in the name",
+                detail="The reject endpoint may only target cancelled states",
             )
 
         # Cancellation cascade before applying state
@@ -408,7 +383,7 @@ class DevelopmentRequestService:
 
         old_state_id = current.request_state_id
         current.request_state_id = request_state_id
-        if new_state.category == StateCategory.CLOSED:
+        if new_state.category == StateCategory.DONE:
             from datetime import datetime
             current.request_close_date = datetime.utcnow()
         current.updated_by_id = user.id
@@ -429,7 +404,7 @@ class DevelopmentRequestService:
         CommentService(self.db).add_comment(
             user=user,
             request_id=request_id,
-            content=f"[Rejected] {comment}",
+            content=f"[Cancelled] {comment}",
         )
         return current
 
@@ -520,8 +495,8 @@ class DevelopmentRequestService:
         if not self.security.can_add_module_lines(user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to add module lines")
 
-        if current.request_state.category == StateCategory.CLOSED:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot add module lines to closed requests")
+        if self._is_request_final_state(current.request_state.category):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot add module lines to finalised requests")
 
         if data.get("module_version"):
             if not self.validate_module_version(data["module_technical_name"], data["module_version"]):
@@ -535,7 +510,7 @@ class DevelopmentRequestService:
         return self.module_line_repo.create_for_request(request_id, **data)
 
     def _is_module_line_locked(self, line_id: int) -> bool:
-        """Return True if this specific module line is linked to an In Progress or Closed RP."""
+        """Return True if this specific module line is linked to an Executing or Closed RP."""
         from app.models.release_plan import ReleasePlan, ReleasePlanLine
         from app.models.control_parameters.release_plan_state import ReleasePlanState
         return (
@@ -544,7 +519,7 @@ class DevelopmentRequestService:
             .join(ReleasePlanState, ReleasePlan.state_id == ReleasePlanState.id)
             .filter(
                 ReleasePlanLine.request_module_line_id == line_id,
-                ReleasePlanState.category.in_(["In Progress", "Closed"]),
+                ReleasePlanState.category.in_(self.LOCKED_RELEASE_PLAN_CATEGORIES),
             )
             .count()
         ) > 0
@@ -552,8 +527,8 @@ class DevelopmentRequestService:
     def _handle_cancellation_cascade(self, request_id: int, state_name: str) -> None:
         """
         When a DR transitions to a cancel/reject state:
-        - Auto-delete RP lines if parent RP is Open
-        - Block if any linked RP is In Progress or Closed
+        - Auto-delete RP lines if parent RP is Draft
+        - Block if any linked RP is Approved, Executing, or Closed
         """
         from app.models.release_plan import ReleasePlan, ReleasePlanLine
         from app.models.control_parameters.release_plan_state import ReleasePlanState
@@ -571,9 +546,9 @@ class DevelopmentRequestService:
 
         for line in linked_lines:
             rp_state_cat = line.release_plan.state.category if line.release_plan and line.release_plan.state else ""
-            if rp_state_cat in ["In Progress", "Closed"]:
+            if rp_state_cat in ["Approved", "Executing", "Closed"]:
                 blocking_plans.append(line.release_plan.plan_number)
-            elif rp_state_cat == "Open":
+            elif rp_state_cat == "Draft":
                 lines_to_delete.append(line)
 
         if blocking_plans:
@@ -598,14 +573,14 @@ class DevelopmentRequestService:
         if not self.security.can_add_module_lines(user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to edit module lines")
 
-        if current.request_state.category == StateCategory.CLOSED:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit module lines on closed requests")
+        if self._is_request_final_state(current.request_state.category):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit module lines on finalised requests")
 
         line = self.module_line_repo.get_by_id_and_request(line_id, request_id)
         if not line:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module line not found")
 
-        # Mutation lock: module_version and md5_sum are frozen when linked to In Progress/Closed RP
+        # Mutation lock: module_version and md5_sum are frozen when linked to Executing/Closed RP
         locked_fields = {"module_version", "module_md5_sum"}
         changing_locked = any(f in data for f in locked_fields)
         if changing_locked and self._is_module_line_locked(line.id):
@@ -613,7 +588,7 @@ class DevelopmentRequestService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
                     f"Cannot edit version or MD5 of '{line.module_technical_name}': "
-                    "it is linked to an In Progress or Closed Release Plan."
+                    "it is linked to an Executing or Closed Release Plan."
                 ),
             )
 
@@ -649,20 +624,20 @@ class DevelopmentRequestService:
         if not self.security.can_add_module_lines(user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to delete module lines")
 
-        if current.request_state.category == StateCategory.CLOSED:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete module lines from closed requests")
+        if self._is_request_final_state(current.request_state.category):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete module lines from finalised requests")
 
         line = self.module_line_repo.get_by_id_and_request(line_id, request_id)
         if not line:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module line not found")
 
-        # Block deletion if this specific line is linked to an In Progress or Closed RP
+        # Block deletion if this specific line is linked to an Executing or Closed RP
         if self._is_module_line_locked(line.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
                     f"Cannot delete '{line.module_technical_name}': "
-                    "it is linked to an In Progress or Closed Release Plan."
+                    "it is linked to an Executing or Closed Release Plan."
                 ),
             )
 
@@ -679,8 +654,8 @@ class DevelopmentRequestService:
         if not self.security.can_add_module_lines(user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to add module lines")
 
-        if current.request_state.category == StateCategory.CLOSED:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot add module lines to closed requests")
+        if self._is_request_final_state(current.request_state.category):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot add module lines to finalised requests")
 
         added = []
         errors = []
@@ -713,11 +688,10 @@ class DevelopmentRequestService:
         if not current:
             return False, []
 
-        # §7.7: only archivable if state is Cancelled/Rejected AND no active Release Plans
-        if current.request_state.category not in ("Cancelled/Rejected", "Cancelled", "Rejected"):
+        if current.request_state.category != StateCategory.CANCELLED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot archive: request must be in a Cancelled or Rejected state first.",
+                detail="Cannot archive: request must be in a Cancelled state first.",
             )
 
         if self._check_has_active_release_plan(request_id):

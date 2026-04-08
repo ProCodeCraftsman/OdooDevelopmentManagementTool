@@ -16,7 +16,7 @@ class TestUserManagementEndpoints:
         response = client.get("/api/v1/users", headers=headers)
         
         assert response.status_code == 403
-        assert "Not enough permissions" in response.json()["detail"]
+        assert "Missing required permissions" in response.json()["detail"]
 
     def test_list_users_as_admin(self, client, admin_user):
         """Functional: Admin users should be able to list all users"""
@@ -113,14 +113,14 @@ class TestUserManagementEndpoints:
         response = client.patch(
             f"/api/v1/users/{user.id}",
             headers=headers,
-            json={"role_id": role.id},
+            json={"role_ids": [role.id]},
         )
         
         assert response.status_code == 200
         data = response.json()
-        assert data["role_id"] == role.id
-        assert data["role"] is not None
-        assert data["role"]["name"] == "Developer"
+        assert "roles" in data
+        assert len(data["roles"]) == 1
+        assert data["roles"][0]["name"] == "Developer"
 
     def test_update_user_change_password(self, client, sample_user, admin_user):
         """Functional: Admin should be able to change user password"""
@@ -277,9 +277,9 @@ class TestUserResponseSchema:
         
         assert response.status_code == 200
         data = response.json()
-        assert "role_id" in data
-        assert "role" in data
-        assert data["role"]["name"] == "Tester"
+        assert "roles" in data
+        assert len(data["roles"]) == 1
+        assert data["roles"][0]["name"] == "Tester"
 
     def test_user_response_without_role(self, client, sample_user, admin_user):
         """Technical: User without role should have null role"""
@@ -294,9 +294,8 @@ class TestUserResponseSchema:
         
         assert response.status_code == 200
         data = response.json()
-        assert "role_id" in data
-        assert data["role_id"] is None
-        assert data["role"] is None
+        assert "roles" in data
+        assert data["roles"] == []
 
     def test_user_response_fields(self, client, sample_user, admin_user):
         """Technical: Verify all expected fields are present"""
@@ -317,7 +316,7 @@ class TestUserResponseSchema:
         assert "email" in data
         assert "is_active" in data
         assert "is_active" in data
-        assert "role_id" in data
+        assert "roles" in data
         
         assert isinstance(data["id"], int)
         assert isinstance(data["username"], str)
@@ -329,7 +328,7 @@ class TestUserResponseSchema:
 class TestRegisterWithRole:
     """Test cases for user registration with roles"""
 
-    def test_register_with_role(self, client, db_session):
+    def test_register_with_role(self, client, db_session, admin_user):
         """Functional: New user should be able to register with role"""
         from app.models.role import Role
         
@@ -337,25 +336,41 @@ class TestRegisterWithRole:
         db_session.add(role)
         db_session.commit()
         
+        auth_response = client.post(
+            "/api/v1/auth/token",
+            json={"username": "admin", "password": "adminpassword123"},
+        )
+        token = auth_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         response = client.post(
             "/api/v1/auth/register",
+            headers=headers,
             json={
                 "username": "newdeveloper",
                 "email": "dev@example.com",
                 "password": "password123",
-                "role_id": role.id,
+                "role_ids": [role.id],
             },
         )
         
         assert response.status_code == 201
         data = response.json()
-        assert data["role_id"] == role.id
-        assert data["role"]["name"] == "Developer"
+        assert len(data["roles"]) == 1
+        assert data["roles"][0]["name"] == "Developer"
 
-    def test_register_without_role(self, client):
-        """Functional: User should be able to register without role"""
+    def test_register_without_role(self, client, admin_user):
+        """Functional: Admin can register a user without assigning roles"""
+        auth_response = client.post(
+            "/api/v1/auth/token",
+            json={"username": "admin", "password": "adminpassword123"},
+        )
+        token = auth_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         response = client.post(
             "/api/v1/auth/register",
+            headers=headers,
             json={
                 "username": "norole",
                 "email": "norole@example.com",
@@ -365,5 +380,4 @@ class TestRegisterWithRole:
         
         assert response.status_code == 201
         data = response.json()
-        assert data["role_id"] is None
-        assert data["role"] is None
+        assert data["roles"] == []

@@ -21,6 +21,9 @@ from app.models.control_parameters import (
     ReleasePlanState,
 )
 from app.models.control_parameter_rule import ControlParameterRule
+from app.models.development_request_state_type_rule import (
+    DevelopmentRequestStateTypeRule,
+)
 from app.models.release_plan import ReleasePlan, ReleasePlanLine
 from app.models.audit_log import AuditLog
 from app.models.comparison_report import (
@@ -53,6 +56,7 @@ __all__ = [
     "Priority",
     "ReleasePlanState",
     "ControlParameterRule",
+    "DevelopmentRequestStateTypeRule",
     "ReleasePlan",
     "ReleasePlanLine",
     "AuditLog",

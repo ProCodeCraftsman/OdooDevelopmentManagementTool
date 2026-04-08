@@ -8,17 +8,23 @@ from app.api.deps import get_current_user, require_permissions
 from app.core.security_matrix import Permission
 from app.models.user import User
 from app.models.control_parameters import RequestType, RequestState, FunctionalCategory, Priority
-from app.models.control_parameter_rule import ControlParameterRule
 from app.models.development_request import DevelopmentRequest
+from app.models.development_request_state_type_rule import (
+    DevelopmentRequestStateTypeRule,
+)
 from app.repositories.request_type import RequestTypeRepository
 from app.repositories.request_state import RequestStateRepository
 from app.repositories.functional_category import FunctionalCategoryRepository
 from app.repositories.priority import PriorityRepository
 from app.repositories.development_request import DevelopmentRequestRepository
-from app.repositories.control_parameter_rule import ControlParameterRuleRepository
+from app.repositories.development_request_state_type_rule import (
+    DevelopmentRequestStateTypeRuleRepository,
+)
 from app.repositories.audit_log import AuditLogRepository
 from app.schemas.control_parameters import (
     ControlParametersResponse,
+    DR_MACRO_STATES,
+    DR_MACRO_TYPES,
     RequestTypeCreate,
     RequestTypeResponse,
     RequestStateCreate,
@@ -28,10 +34,10 @@ from app.schemas.control_parameters import (
     PriorityCreate,
     PriorityResponse,
     ControlParameterUpdate,
-    ControlParameterRuleCreate,
-    ControlParameterRuleUpdate,
-    ControlParameterRuleResponse,
-    ControlParameterRuleListResponse,
+    DevelopmentRequestStateTypeRuleCreate,
+    DevelopmentRequestStateTypeRuleUpdate,
+    DevelopmentRequestStateTypeRuleResponse,
+    DevelopmentRequestStateTypeRuleListResponse,
 )
 from app.schemas.development_request import (
     DevelopmentRequestCreate,
@@ -114,11 +120,17 @@ def list_control_parameters(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    rule_repo = DevelopmentRequestStateTypeRuleRepository(db)
+    rule_repo.seed_default_rules()
     return ControlParametersResponse(
         request_types=RequestTypeRepository(db).get_active(),
         request_states=RequestStateRepository(db).get_active(),
         functional_categories=FunctionalCategoryRepository(db).get_active(),
         priorities=PriorityRepository(db).get_active(),
+        state_type_rules=[
+            _build_state_type_rule_response(rule)
+            for rule in rule_repo.get_all()
+        ],
     )
 
 
@@ -128,6 +140,11 @@ def create_request_type(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions([Permission.SYSTEM_MANAGE])),
 ):
+    if data.category not in DR_MACRO_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Request type category must be one of: {', '.join(DR_MACRO_TYPES)}",
+        )
     repo = RequestTypeRepository(db)
     if repo.get_by(name=data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request type with this name already exists")
@@ -140,6 +157,11 @@ def create_request_state(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions([Permission.SYSTEM_MANAGE])),
 ):
+    if data.category not in DR_MACRO_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Request state category must be one of: {', '.join(DR_MACRO_STATES)}",
+        )
     repo = RequestStateRepository(db)
     if repo.get_by(name=data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request state with this name already exists")
@@ -242,6 +264,10 @@ def update_control_parameter(
         obj.name = update_data["name"]
     if "description" in update_data:
         obj.description = update_data["description"]
+    if "category" in update_data:
+        obj.category = update_data["category"]
+    if "display_order" in update_data:
+        obj.display_order = update_data["display_order"]
 
     db.commit()
     db.refresh(obj)
@@ -259,51 +285,80 @@ def update_control_parameter(
 # Control Parameter Rules
 # ---------------------------------------------------------------------------
 
-@router.get("/control-parameters/rules", response_model=ControlParameterRuleListResponse)
+def _build_state_type_rule_response(
+    rule: DevelopmentRequestStateTypeRule,
+) -> DevelopmentRequestStateTypeRuleResponse:
+    return DevelopmentRequestStateTypeRuleResponse(
+        id=rule.id,
+        request_state_id=rule.request_state_id,
+        request_type_id=rule.request_type_id,
+        request_state_name=rule.request_state.name if rule.request_state else "",
+        request_state_category=rule.request_state.category if rule.request_state else "",
+        request_type_name=rule.request_type.name if rule.request_type else "",
+        request_type_category=rule.request_type.category if rule.request_type else "",
+        is_active=rule.is_active,
+        created_at=rule.created_at,
+        updated_at=rule.updated_at,
+    )
+
+
+@router.get("/control-parameters/rules", response_model=DevelopmentRequestStateTypeRuleListResponse)
 def list_control_parameter_rules(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    repo = ControlParameterRuleRepository(db)
+    repo = DevelopmentRequestStateTypeRuleRepository(db)
     repo.seed_default_rules()
-    return ControlParameterRuleListResponse(rules=repo.get_all())
+    return DevelopmentRequestStateTypeRuleListResponse(
+        rules=[_build_state_type_rule_response(rule) for rule in repo.get_all()]
+    )
 
 
-@router.post("/control-parameters/rules", response_model=ControlParameterRuleResponse)
+@router.post("/control-parameters/rules", response_model=DevelopmentRequestStateTypeRuleResponse)
 def create_control_parameter_rule(
-    data: ControlParameterRuleCreate,
+    data: DevelopmentRequestStateTypeRuleCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions([Permission.SYSTEM_MANAGE])),
 ):
-    repo = ControlParameterRuleRepository(db)
-    rule = repo.create(ControlParameterRule(**data.model_dump()))
-    return ControlParameterRuleResponse.model_validate(rule)
+    repo = DevelopmentRequestStateTypeRuleRepository(db)
+    if repo.get_by_pair(data.request_state_id, data.request_type_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rule for this request state and request type already exists",
+        )
+    rule = repo.create(DevelopmentRequestStateTypeRule(**data.model_dump()))
+    return _build_state_type_rule_response(rule)
 
 
-@router.put("/control-parameters/rules/{rule_id}", response_model=ControlParameterRuleResponse)
+@router.put("/control-parameters/rules/{rule_id}", response_model=DevelopmentRequestStateTypeRuleResponse)
 def update_control_parameter_rule(
     rule_id: int,
-    data: ControlParameterRuleUpdate,
+    data: DevelopmentRequestStateTypeRuleUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions([Permission.SYSTEM_MANAGE])),
 ):
-    repo = ControlParameterRuleRepository(db)
+    repo = DevelopmentRequestStateTypeRuleRepository(db)
     rule = repo.get(rule_id)
     if not rule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule with id {rule_id} not found")
 
-    if data.request_state_name is not None:
-        rule.request_state_name = data.request_state_name
-    if data.allowed_type_categories is not None:
-        rule.allowed_type_categories = data.allowed_type_categories
-    if data.allowed_priorities is not None:
-        rule.allowed_priorities = data.allowed_priorities
-    if data.allowed_functional_categories is not None:
-        rule.allowed_functional_categories = data.allowed_functional_categories
+    next_state_id = data.request_state_id or rule.request_state_id
+    next_type_id = data.request_type_id or rule.request_type_id
+    duplicate = repo.get_by_pair(next_state_id, next_type_id)
+    if duplicate and duplicate.id != rule.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rule for this request state and request type already exists",
+        )
+
+    if data.request_state_id is not None:
+        rule.request_state_id = data.request_state_id
+    if data.request_type_id is not None:
+        rule.request_type_id = data.request_type_id
     if data.is_active is not None:
         rule.is_active = data.is_active
 
-    return ControlParameterRuleResponse.model_validate(repo.update(rule))
+    return _build_state_type_rule_response(repo.update(rule))
 
 
 @router.delete("/control-parameters/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -312,21 +367,22 @@ def delete_control_parameter_rule(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions([Permission.SYSTEM_MANAGE])),
 ):
-    if not ControlParameterRuleRepository(db).delete(rule_id):
+    if not DevelopmentRequestStateTypeRuleRepository(db).delete(rule_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule with id {rule_id} not found")
 
 
-@router.post("/control-parameters/rules/{rule_id}/toggle", response_model=ControlParameterRuleResponse)
+@router.post("/control-parameters/rules/{rule_id}/toggle", response_model=DevelopmentRequestStateTypeRuleResponse)
 def toggle_control_parameter_rule(
     rule_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions([Permission.SYSTEM_MANAGE])),
 ):
-    repo = ControlParameterRuleRepository(db)
-    rule = repo.toggle_active(rule_id)
+    repo = DevelopmentRequestStateTypeRuleRepository(db)
+    rule = repo.get(rule_id)
     if not rule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule with id {rule_id} not found")
-    return ControlParameterRuleResponse.model_validate(rule)
+    rule.is_active = not rule.is_active
+    return _build_state_type_rule_response(repo.update(rule))
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +422,7 @@ def list_requests(
     is_archived: Optional[bool] = Query(None, description="True = archived only, False = active only, omit = both"),
     search: Optional[str] = Query(None, description="Full-text search across request_number and title"),
     group_by: Optional[str] = Query(None, description="Group items by: state_category | assigned_developer | priority | functional_category"),
-    state_category: Optional[str] = Query(None, description="Filter by state category: Open | In Progress | Closed"),
+    state_category: Optional[str] = Query(None, description="Filter by state category: Draft | In Progress | Ready | Done | Cancelled"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),

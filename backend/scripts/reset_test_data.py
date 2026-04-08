@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-reset_test_data.py — Wipe all transactional data for a clean test cycle.
+reset_test_data.py - Wipe all transactional data for a clean test cycle.
 
 Preserves (never touched):
-  - users  /  refresh_tokens  /  roles
+  - users / refresh_tokens / roles / user_roles
 
 Clears:
   - development_requests and every child table
@@ -11,7 +11,9 @@ Clears:
      related_requests junction, audit_logs)
   - release_plans and release_plan_lines
   - environments, sync_records, module_dependencies, modules
-  - comparison_report_rows, report_metadata
+  - comparison_reports, comparison_report_rows, version_drift_entries, report_metadata
+  - saved_views
+  - development_request_state_type_rules
 
 Also removes all uploaded attachment files from  backend/uploads/.
 
@@ -20,6 +22,7 @@ Run from the backend/ directory:
 
 Dry-run (shows counts, makes no changes):
     python scripts/reset_test_data.py --dry-run
+    python scripts/reset_test_data.py --yes
 """
 
 import argparse
@@ -27,16 +30,17 @@ import shutil
 import sys
 from pathlib import Path
 
-# ── path setup ────────────────────────────────────────────────────────────────
+# -- path setup ---------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from app.core.database import SessionLocal
 
 # Attachment upload root (relative to backend/)
 UPLOAD_BASE_DIR = Path(__file__).parent.parent / "uploads"
 
-# ── deletion plan ─────────────────────────────────────────────────────────────
+# -- deletion plan ------------------------------------------------------------
 # Each entry: (label, table_name)
 # Order matters — child tables before parents to satisfy FK constraints.
 CLEAR_SEQUENCE = [
@@ -46,16 +50,20 @@ CLEAR_SEQUENCE = [
     ("Request module lines",        "request_module_lines"),
     ("Request release-plan lines",  "request_release_plan_lines"),
     ("Related-requests links",      "request_related_requests"),
+    ("Saved views",                 "saved_views"),
     ("Release plan lines",          "release_plan_lines"),
     ("Release plans",               "release_plans"),
     ("Development requests",        "development_requests"),
+    ("Version drift entries",       "version_drift_entries"),
     ("Comparison report rows",      "comparison_report_rows"),
+    ("Comparison reports",          "comparison_reports"),
     ("Report metadata",             "report_metadata"),
     ("Sync records",                "sync_records"),
     ("Module dependencies",         "module_dependencies"),
     ("Modules",                     "modules"),
     ("Environments",                "environments"),
     # Control parameters — deleted last since dev_requests/release_plans are gone
+    ("DR state-type rules",         "development_request_state_type_rules"),
     ("Control parameter rules",     "control_parameter_rules"),
     ("Release plan states",         "release_plan_states"),
     ("Request states",              "request_states"),
@@ -96,7 +104,7 @@ def wipe_uploads(dry_run: bool) -> int:
     return dirs_removed
 
 
-def main(dry_run: bool) -> None:
+def main(dry_run: bool, assume_yes: bool) -> None:
     db = SessionLocal()
 
     print()
@@ -106,13 +114,14 @@ def main(dry_run: bool) -> None:
         print(" MODE: DRY RUN — no changes will be made")
     print("=" * 60)
 
-    # ── show current row counts ───────────────────────────────────────────────
+    # -- show current row counts ----------------------------------------------
     print("\nCurrent row counts:")
     totals = {}
     for label, table in CLEAR_SEQUENCE:
         try:
             n = count_rows(db, table)
         except Exception as e:
+            db.rollback()
             n = f"ERR({e})"
         totals[table] = n
         print(f"  {label:<35} {n}")
@@ -126,28 +135,30 @@ def main(dry_run: bool) -> None:
         db.close()
         return
 
-    # ── confirmation prompt ───────────────────────────────────────────────────
+    # -- confirmation prompt ---------------------------------------------------
     print()
     print("WARNING: This will permanently delete all transactional data.")
     print("         Users and roles are NOT affected.")
-    confirm = input("Type  YES  to proceed: ").strip()
-    if confirm != "YES":
-        print("Aborted.")
-        db.close()
-        return
+    if not assume_yes:
+        confirm = input("Type  YES  to proceed: ").strip()
+        if confirm != "YES":
+            print("Aborted.")
+            db.close()
+            return
 
-    # ── execute deletions ─────────────────────────────────────────────────────
+    # -- execute deletions -----------------------------------------------------
     print()
     try:
         for label, table in CLEAR_SEQUENCE:
             before = totals.get(table, "?")
-            db.execute(text(f"DELETE FROM {table}"))
-            print(f"  Cleared  {label:<35} ({before} rows)")
+            try:
+                db.execute(text(f"DELETE FROM {table}"))
+                db.commit()
+                print(f"  Cleared  {label:<35} ({before} rows)")
+            except ProgrammingError as exc:
+                db.rollback()
+                print(f"  Skipped   {label:<35} (table missing: {exc.orig})")
 
-        # Commit DELETEs first — sequence resets must be separate transactions
-        # because a failed ALTER SEQUENCE (junction tables with no sequence) calls
-        # db.rollback(), which would undo all the DELETEs if they weren't committed.
-        db.commit()
         print("\n  All rows deleted.")
 
     except Exception as e:
@@ -163,7 +174,7 @@ def main(dry_run: bool) -> None:
         reset_sequence(db, table)
     print("  All table sequences reset to 1.")
 
-    # ── wipe uploaded files ───────────────────────────────────────────────────
+    # -- wipe uploaded files ---------------------------------------------------
     removed_dirs = wipe_uploads(dry_run=False)
     print(f"  Removed {removed_dirs} attachment folder(s) from uploads/")
 
@@ -183,5 +194,10 @@ if __name__ == "__main__":
         action="store_true",
         help="Show what would be deleted without making changes",
     )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip confirmation prompt and proceed immediately",
+    )
     args = parser.parse_args()
-    main(dry_run=args.dry_run)
+    main(dry_run=args.dry_run, assume_yes=args.yes)

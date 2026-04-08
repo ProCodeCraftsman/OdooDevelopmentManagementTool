@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, JSON, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,9 +40,15 @@ class ComparisonReportRow(Base):
     )
     technical_name: Mapped[str] = mapped_column(String(255), index=True)
     module_name: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, index=True)
-    version_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    version_data: Mapped[Optional[dict]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
     # {"Upgrade": N, "Error (Downgrade)": N, "Missing Module": N, "Error (Missing in Source)": N, "No Action": N}
-    action_counts: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    action_counts: Mapped[Optional[dict]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
 
     report: Mapped["ComparisonReport"] = relationship(back_populates="rows")
 

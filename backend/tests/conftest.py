@@ -15,6 +15,7 @@ from app.models.user import User
 from app.core.database import get_db
 from app.core.config import get_settings
 from app.main import app
+from app.api.v1.auth import limiter as auth_limiter
 
 
 @pytest.fixture(scope="function")
@@ -46,8 +47,12 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
+    app.state.limiter.reset()
+    auth_limiter.reset()
     with TestClient(app) as test_client:
         yield test_client
+    app.state.limiter.reset()
+    auth_limiter.reset()
     app.dependency_overrides.clear()
 
 

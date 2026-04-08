@@ -86,7 +86,7 @@ class TestRoleEndpoints:
             json={
                 "name": "New Developer Role",
                 "description": "Role for developers",
-                "permissions": "modules:read,modules:write",
+                "permissions": ["modules:read", "modules:write"],
                 "priority": 60,
             },
         )
@@ -95,7 +95,7 @@ class TestRoleEndpoints:
         data = response.json()
         assert data["name"] == "New Developer Role"
         assert data["description"] == "Role for developers"
-        assert data["permissions"] == "modules:read,modules:write"
+        assert data["permissions"] == ["modules:read", "modules:write"]
         assert data["priority"] == 60
         assert data["is_active"] is True
         assert "id" in data
@@ -266,8 +266,8 @@ class TestRolePermissions:
     """Test cases for role permissions functionality"""
 
     def test_role_permissions_stored_as_text(self, client, db_session):
-        """Technical: Permissions should be stored and retrieved correctly"""
-        permissions = "modules:read,modules:write,environments:read"
+        """Technical: Permissions should be stored and retrieved as a list"""
+        permissions = ["modules:read", "modules:write", "environments:read"]
         
         response = client.post(
             "/api/v1/roles",
@@ -281,14 +281,14 @@ class TestRolePermissions:
         assert response.json()["permissions"] == permissions
 
     def test_role_permissions_null_handling(self, client):
-        """Technical: Null permissions should be handled"""
+        """Technical: Missing permissions should normalize to an empty list"""
         response = client.post(
             "/api/v1/roles",
             json={"name": "No Permissions"},
         )
         
         assert response.status_code == 201
-        assert response.json()["permissions"] is None
+        assert response.json()["permissions"] == []
 
     def test_role_priority_bounds(self, client):
         """Technical: Priority should accept valid integer values"""

@@ -2,6 +2,17 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
 
+DR_MACRO_TYPES = ("Development", "Non-development")
+DR_MACRO_STATES = ("Draft", "In Progress", "Ready", "Done", "Cancelled")
+RELEASE_PLAN_MACRO_STATES = (
+    "Draft",
+    "Planned",
+    "Approved",
+    "Executing",
+    "Closed",
+    "Failed",
+)
+
 
 class RequestTypeBase(BaseModel):
     name: str
@@ -80,6 +91,8 @@ class PriorityResponse(PriorityBase):
 class ControlParameterUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    category: Optional[str] = None
+    display_order: Optional[int] = None
 
 
 class ControlParametersResponse(BaseModel):
@@ -87,35 +100,36 @@ class ControlParametersResponse(BaseModel):
     request_states: List[RequestStateResponse]
     functional_categories: List[FunctionalCategoryResponse]
     priorities: List[PriorityResponse]
+    state_type_rules: List["DevelopmentRequestStateTypeRuleResponse"] = []
 
 
-class ControlParameterRuleBase(BaseModel):
-    request_state_name: str
-    allowed_type_categories: str = "ALL"
-    allowed_priorities: str = "ALL"
-    allowed_functional_categories: str = "ALL"
+class DevelopmentRequestStateTypeRuleBase(BaseModel):
+    request_state_id: int
+    request_type_id: int
     is_active: bool = True
 
 
-class ControlParameterRuleCreate(ControlParameterRuleBase):
+class DevelopmentRequestStateTypeRuleCreate(DevelopmentRequestStateTypeRuleBase):
     pass
 
 
-class ControlParameterRuleUpdate(BaseModel):
-    request_state_name: Optional[str] = None
-    allowed_type_categories: Optional[str] = None
-    allowed_priorities: Optional[str] = None
-    allowed_functional_categories: Optional[str] = None
+class DevelopmentRequestStateTypeRuleUpdate(BaseModel):
+    request_state_id: Optional[int] = None
+    request_type_id: Optional[int] = None
     is_active: Optional[bool] = None
 
 
-class ControlParameterRuleResponse(ControlParameterRuleBase):
+class DevelopmentRequestStateTypeRuleResponse(DevelopmentRequestStateTypeRuleBase):
     id: int
+    request_state_name: str
+    request_state_category: str
+    request_type_name: str
+    request_type_category: str
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class ControlParameterRuleListResponse(BaseModel):
-    rules: List[ControlParameterRuleResponse]
+class DevelopmentRequestStateTypeRuleListResponse(BaseModel):
+    rules: List[DevelopmentRequestStateTypeRuleResponse]

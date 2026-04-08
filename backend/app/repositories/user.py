@@ -22,6 +22,7 @@ class UserRepository(BaseRepository[User]):
         password: str,
         is_active: bool = True,
         role_ids: list[int] | None = None,
+        role_id: int | None = None,
     ) -> User:
         from app.models.role import Role
 
@@ -32,8 +33,12 @@ class UserRepository(BaseRepository[User]):
             hashed_password=hashed_password,
             is_active=is_active,
         )
-        if role_ids:
-            roles = self.db.query(Role).filter(Role.id.in_(role_ids)).all()
+        effective_role_ids = role_ids
+        if effective_role_ids is None and role_id is not None:
+            effective_role_ids = [role_id]
+
+        if effective_role_ids:
+            roles = self.db.query(Role).filter(Role.id.in_(effective_role_ids)).all()
             user.roles = roles
         self.db.add(user)
         self.db.commit()

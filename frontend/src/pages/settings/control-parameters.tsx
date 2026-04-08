@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, RotateCcw, Archive, AlertTriangle, Pencil } from "lucide-react";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Pagination } from "@/components/ui/pagination";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { cn } from "@/lib/utils";
 import {
   useControlParameterList,
@@ -37,10 +39,7 @@ import {
   useUpdateControlParameter,
   useControlParameterRules,
   useCreateControlParameterRule,
-  useUpdateControlParameterRule,
-  useDeleteControlParameterRule,
   useToggleControlParameterRule,
-  useFunctionalCategories,
   type ControlParameterType,
 } from "@/hooks/useControlParameters";
 import {
@@ -62,12 +61,11 @@ const requestTypeSchema = z.object({
 const requestStateSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   description: z.string().optional(),
-  category: z.enum(["open", "in_progress", "closed", "cancelled"]),
+  category: z.enum(["Draft", "In Progress", "Ready", "Done", "Cancelled"]),
 });
 
 const prioritySchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
-  description: z.string().optional(),
   level: z.number().int().min(1).max(5),
 });
 
@@ -88,12 +86,26 @@ interface TabConfig {
 }
 
 const TAB_CONFIGS: TabConfig[] = [
-  { key: "request-types", label: "Request Types", schema: requestTypeSchema },
-  { key: "request-states", label: "Request States", schema: requestStateSchema },
-  { key: "priorities", label: "Priorities", schema: prioritySchema },
-  { key: "functional-categories", label: "Categories", schema: categorySchema },
-  { key: "rules", label: "Rules", schema: categorySchema },
+  { key: "request-types", label: "DR Request Types", schema: requestTypeSchema },
+  { key: "request-states", label: "DR Request States", schema: requestStateSchema },
+  { key: "priorities", label: "DR Priorities", schema: prioritySchema },
+  { key: "functional-categories", label: "DR Functional Categories", schema: categorySchema },
+  { key: "rules", label: "DR State-Type Rules", schema: categorySchema },
 ];
+
+function getActiveTypeIdsForState(rules: ControlParameterRule[] | undefined, stateId: number): number[] {
+  if (!rules) return [];
+
+  return rules
+    .filter((rule) => rule.request_state_id === stateId && rule.is_active)
+    .map((rule) => rule.request_type_id)
+    .sort((a, b) => a - b);
+}
+
+function areTypeSelectionsEqual(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
 
 
 function ParameterRow({
@@ -229,7 +241,7 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle>Request Types</CardTitle>
+            <CardTitle>DR Request Types</CardTitle>
             <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <SheetTrigger asChild>
                 <Button size="sm">
@@ -239,8 +251,8 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
-                  <SheetTitle>Add Request Type</SheetTitle>
-                  <SheetDescription>Create a new request type</SheetDescription>
+                  <SheetTitle>Add DR Request Type</SheetTitle>
+                  <SheetDescription>Create a new development request type</SheetDescription>
                 </SheetHeader>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6">
                   <div className="space-y-2">
@@ -298,7 +310,7 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
       <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Edit Request Type</SheetTitle>
+            <SheetTitle>Edit DR Request Type</SheetTitle>
             <SheetDescription>Update name and description (category is read-only)</SheetDescription>
           </SheetHeader>
           <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
@@ -346,12 +358,12 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
 
   const form = useForm<RequestStateFormData>({
     resolver: zodResolver(requestStateSchema),
-    defaultValues: { name: "", description: "", category: "open" },
+    defaultValues: { name: "", description: "", category: "Draft" },
   });
 
   const editForm = useForm<RequestStateFormData>({
     resolver: zodResolver(requestStateSchema),
-    defaultValues: { name: "", description: "", category: "open" },
+    defaultValues: { name: "", description: "", category: "Draft" },
   });
 
   const onSubmit = async (data: RequestStateFormData) => {
@@ -385,7 +397,7 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
     editForm.reset({
       name: item.name,
       description: item.description || "",
-      category: (item.category as RequestStateFormData["category"]) || "open",
+      category: (item.category as RequestStateFormData["category"]) || "Draft",
     });
     setIsEditSheetOpen(true);
   };
@@ -397,7 +409,7 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle>Request States</CardTitle>
+            <CardTitle>DR Request States</CardTitle>
             <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <SheetTrigger asChild>
                 <Button size="sm">
@@ -407,8 +419,8 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
-                  <SheetTitle>Add Request State</SheetTitle>
-                  <SheetDescription>Create a new request state</SheetDescription>
+                  <SheetTitle>Add DR Request State</SheetTitle>
+                  <SheetDescription>Create a new development request state</SheetDescription>
                 </SheetHeader>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6">
                   <div className="space-y-2">
@@ -429,10 +441,11 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
                       {...form.register("category")}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
-                      <option value="open">Open</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="closed">Closed</option>
-                      <option value="cancelled">Cancelled</option>
+                      <option value="Draft">Draft</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Ready">Ready</option>
+                      <option value="Done">Done</option>
+                      <option value="Cancelled">Cancelled</option>
                     </select>
                   </div>
                   <Button type="submit" className="w-full" disabled={createMutation.isPending}>
@@ -461,7 +474,7 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
       <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Edit Request State</SheetTitle>
+            <SheetTitle>Edit DR Request State</SheetTitle>
             <SheetDescription>Update name and description (category is read-only)</SheetDescription>
           </SheetHeader>
           <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
@@ -509,12 +522,12 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
 
   const form = useForm<PriorityFormData>({
     resolver: zodResolver(prioritySchema),
-    defaultValues: { name: "", description: "", level: 3 },
+    defaultValues: { name: "", level: 3 },
   });
 
   const editForm = useForm<PriorityFormData>({
     resolver: zodResolver(prioritySchema),
-    defaultValues: { name: "", description: "", level: 3 },
+    defaultValues: { name: "", level: 3 },
   });
 
   const onSubmit = async (data: PriorityFormData) => {
@@ -533,7 +546,7 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
       await updateMutation.mutateAsync({
         paramType: "priorities",
         id: editingItem.id,
-        data: { name: data.name, description: data.description },
+        data: { name: data.name },
       });
       setIsEditSheetOpen(false);
       setEditingItem(null);
@@ -547,7 +560,6 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
     setEditingItem(item);
     editForm.reset({
       name: item.name,
-      description: item.description || "",
       level: item.level ?? 3,
     });
     setIsEditSheetOpen(true);
@@ -560,7 +572,7 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle>Priorities</CardTitle>
+            <CardTitle>DR Priorities</CardTitle>
             <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <SheetTrigger asChild>
                 <Button size="sm">
@@ -570,8 +582,8 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
-                  <SheetTitle>Add Priority</SheetTitle>
-                  <SheetDescription>Create a new priority level</SheetDescription>
+                  <SheetTitle>Add DR Priority</SheetTitle>
+                  <SheetDescription>Create a new development request priority level</SheetDescription>
                 </SheetHeader>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6">
                   <div className="space-y-2">
@@ -580,10 +592,6 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
                     {form.formState.errors.name && (
                       <p className="text-sm text-red-500">{form.formState.errors.name.message}</p>
                     )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Input id="description" {...form.register("description")} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="level">Level (1-5)</Label>
@@ -618,8 +626,8 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
       <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Edit Priority</SheetTitle>
-            <SheetDescription>Update name and description (level is read-only)</SheetDescription>
+            <SheetTitle>Edit DR Priority</SheetTitle>
+            <SheetDescription>Update name (level is read-only)</SheetDescription>
           </SheetHeader>
           <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
             <div className="space-y-2">
@@ -631,13 +639,6 @@ function PriorityTab({ showArchived }: { showArchived: boolean }) {
               {editForm.formState.errors.name && (
                 <p className="text-sm text-red-500">{editForm.formState.errors.name.message}</p>
               )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Input 
-                id="edit-description" 
-                {...editForm.register("description")}
-              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-level">Level (read-only)</Label>
@@ -716,7 +717,7 @@ function CategoryTab({ showArchived }: { showArchived: boolean }) {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle>Functional Categories</CardTitle>
+            <CardTitle>DR Functional Categories</CardTitle>
             <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <SheetTrigger asChild>
                 <Button size="sm">
@@ -726,8 +727,8 @@ function CategoryTab({ showArchived }: { showArchived: boolean }) {
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
-                  <SheetTitle>Add Category</SheetTitle>
-                  <SheetDescription>Create a new functional category</SheetDescription>
+                  <SheetTitle>Add DR Functional Category</SheetTitle>
+                  <SheetDescription>Create a new development request functional category</SheetDescription>
                 </SheetHeader>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6">
                   <div className="space-y-2">
@@ -767,7 +768,7 @@ function CategoryTab({ showArchived }: { showArchived: boolean }) {
       <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>Edit Category</SheetTitle>
+            <SheetTitle>Edit DR Functional Category</SheetTitle>
             <SheetDescription>Update name and description</SheetDescription>
           </SheetHeader>
           <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
@@ -887,76 +888,89 @@ function TableContent({
 
 function RulesTab() {
   const { data: rules, isLoading, error } = useControlParameterRules();
-  const { data: functionalCategories } = useFunctionalCategories();
+  const { data: requestTypes = [] } = useControlParameterList("request-types");
+  const { data: requestStates = [] } = useControlParameterList("request-states");
   const createMutation = useCreateControlParameterRule();
-  const updateMutation = useUpdateControlParameterRule();
-  const deleteMutation = useDeleteControlParameterRule();
   const toggleMutation = useToggleControlParameterRule();
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState<ControlParameterRule | null>(null);
-  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+  const [pendingSelections, setPendingSelections] = useState<Record<number, number[]>>({});
+  const [savingStateId, setSavingStateId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const limit = 5;
 
-  const form = useForm<{
-    request_state_name: string;
-    allowed_type_categories: string;
-    allowed_priorities: string;
-    allowed_functional_categories: string;
-  }>({
-    defaultValues: {
-      request_state_name: "",
-      allowed_type_categories: "ALL",
-      allowed_priorities: "ALL",
-      allowed_functional_categories: "ALL",
-    },
-  });
+  const paginatedStates = requestStates.slice((page - 1) * limit, page * limit);
+  const totalPages = Math.ceil(requestStates.length / limit);
 
-  const editForm = useForm<{
-    request_state_name: string;
-    allowed_type_categories: string;
-    allowed_priorities: string;
-    allowed_functional_categories: string;
-  }>({
-    defaultValues: {
-      request_state_name: "",
-      allowed_type_categories: "ALL",
-      allowed_priorities: "ALL",
-      allowed_functional_categories: "ALL",
-    },
-  });
+  const getSelectedTypeIds = (stateId: number) => pendingSelections[stateId] ?? getActiveTypeIdsForState(rules, stateId);
 
-  const onSubmit = async (data: { request_state_name: string; allowed_type_categories: string; allowed_priorities: string; allowed_functional_categories: string }) => {
-    try {
-      await createMutation.mutateAsync(data);
-      setIsSheetOpen(false);
-      form.reset();
-    } catch {
-      // Error handled by mutation
-    }
+  const handleSelectionChange = (stateId: number, selectedTypeNames: string[]) => {
+    const typeIds = requestTypes
+      .filter((type) => selectedTypeNames.includes(type.name))
+      .map((type) => type.id)
+      .sort((a, b) => a - b);
+
+    setPendingSelections((current) => ({
+      ...current,
+      [stateId]: typeIds,
+    }));
   };
 
-  const onEditSubmit = async (data: { request_state_name: string; allowed_type_categories: string; allowed_priorities: string; allowed_functional_categories: string }) => {
-    if (!editingRule) return;
-    try {
-      await updateMutation.mutateAsync({ id: editingRule.id, data });
-      setIsEditSheetOpen(false);
-      setEditingRule(null);
-      editForm.reset();
-    } catch {
-      // Error handled by mutation
-    }
-  };
-
-  const handleEdit = (rule: ControlParameterRule) => {
-    setEditingRule(rule);
-    editForm.reset({
-      request_state_name: rule.request_state_name,
-      allowed_type_categories: rule.allowed_type_categories,
-      allowed_priorities: rule.allowed_priorities,
-      allowed_functional_categories: rule.allowed_functional_categories,
+  const handleReset = (stateId: number) => {
+    setPendingSelections((current) => {
+      const next = { ...current };
+      delete next[stateId];
+      return next;
     });
-    setIsEditSheetOpen(true);
+  };
+
+  const handleSave = async (stateId: number) => {
+    if (!rules) return;
+
+    const selectedTypeIds = getSelectedTypeIds(stateId);
+    const activeTypeIds = getActiveTypeIdsForState(rules, stateId);
+
+    if (areTypeSelectionsEqual(selectedTypeIds, activeTypeIds)) {
+      return;
+    }
+
+    const stateRules = rules.filter((rule) => rule.request_state_id === stateId);
+    const activeTypeSet = new Set(activeTypeIds);
+    const selectedTypeSet = new Set(selectedTypeIds);
+    const toDisable = stateRules.filter((rule) => rule.is_active && !selectedTypeSet.has(rule.request_type_id));
+    const toEnable = selectedTypeIds.filter((typeId) => !activeTypeSet.has(typeId));
+
+    try {
+      setSavingStateId(stateId);
+
+      for (const rule of toDisable) {
+        await toggleMutation.mutateAsync(rule.id);
+      }
+
+      for (const typeId of toEnable) {
+        const existingRule = stateRules.find((rule) => rule.request_type_id === typeId);
+        if (existingRule) {
+          if (!existingRule.is_active) {
+            await toggleMutation.mutateAsync(existingRule.id);
+          }
+          continue;
+        }
+
+        await createMutation.mutateAsync({
+          request_state_id: stateId,
+          request_type_id: typeId,
+        });
+      }
+
+      setPendingSelections((current) => {
+        const next = { ...current };
+        delete next[stateId];
+        return next;
+      });
+      toast.success("DR state-type rules updated successfully");
+    } catch {
+      // Error handled by mutations
+    } finally {
+      setSavingStateId(null);
+    }
   };
 
   return (
@@ -964,73 +978,12 @@ function RulesTab() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle>Control Parameter Rules</CardTitle>
-            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-              <SheetTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Rule
-                </Button>
-              </SheetTrigger>
-              <SheetContent>
-                <SheetHeader>
-                  <SheetTitle>Add Rule</SheetTitle>
-                  <SheetDescription>Create a new control parameter rule</SheetDescription>
-                </SheetHeader>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="request_state_name">Request State</Label>
-                    <Input id="request_state_name" {...form.register("request_state_name", { required: true })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="allowed_type_categories">Allowed Type Categories</Label>
-                    <select
-                      id="allowed_type_categories"
-                      {...form.register("allowed_type_categories")}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="ALL">ALL</option>
-                      <option value="Development">Development</option>
-                      <option value="Non Development">Non Development</option>
-                      <option value="Development,Non Development">Development, Non Development</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="allowed_priorities">Allowed Priorities</Label>
-                    <select
-                      id="allowed_priorities"
-                      {...form.register("allowed_priorities")}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="ALL">ALL</option>
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                      <option value="5">5</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="allowed_functional_categories">Allowed Functional Categories</Label>
-                    <select
-                      id="allowed_functional_categories"
-                      {...form.register("allowed_functional_categories")}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="ALL">ALL</option>
-                      {functionalCategories?.map((cat) => (
-                        <option key={cat.id} value={cat.name}>
-                          {cat.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={createMutation.isPending}>
-                    {createMutation.isPending ? "Creating..." : "Create"}
-                  </Button>
-                </form>
-              </SheetContent>
-            </Sheet>
+            <div>
+              <CardTitle>DR State-Type Rules</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Configure allowed DR request types for each DR request state.
+              </p>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -1042,63 +995,85 @@ function RulesTab() {
             </div>
           ) : error ? (
             <div className="text-center py-8 text-red-500">Error loading rules</div>
-          ) : !rules?.length ? (
-            <div className="text-center py-8 text-muted-foreground">No rules found</div>
+          ) : !requestStates.length ? (
+            <div className="text-center py-8 text-muted-foreground">No DR request states found</div>
           ) : (
             <div>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>State</TableHead>
-                      <TableHead className="hidden md:table-cell">Type Categories</TableHead>
-                      <TableHead className="hidden lg:table-cell">Priorities</TableHead>
-                      <TableHead className="hidden lg:table-cell">Functional Categories</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>DR Request State</TableHead>
+                      <TableHead className="hidden md:table-cell">DR State Macro</TableHead>
+                      <TableHead className="min-w-[280px]">Allowed DR Request Types</TableHead>
+                      <TableHead className="hidden lg:table-cell">Active Rules</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rules.slice((page - 1) * limit, page * limit).map((rule) => (
-                      <TableRow key={rule.id}>
-                        <TableCell>{rule.request_state_name}</TableCell>
-                        <TableCell className="hidden md:table-cell">{rule.allowed_type_categories}</TableCell>
-                        <TableCell className="hidden lg:table-cell">{rule.allowed_priorities}</TableCell>
-                        <TableCell className="hidden lg:table-cell">{rule.allowed_functional_categories}</TableCell>
-                        <TableCell>
-                          <Badge variant={rule.is_active ? "default" : "secondary"}>
-                            {rule.is_active ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => handleEdit(rule)} title="Edit">
-                              <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => toggleMutation.mutate(rule.id)}
-                            title={rule.is_active ? "Disable" : "Enable"}
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(rule.id)} title="Delete">
-                            <Archive className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                      </TableRow>
-                    ))}
+                    {paginatedStates.map((state) => {
+                      const selectedTypeIds = getSelectedTypeIds(state.id);
+                      const activeTypeIds = getActiveTypeIdsForState(rules, state.id);
+                      const selectedTypeNames = requestTypes
+                        .filter((type) => selectedTypeIds.includes(type.id))
+                        .map((type) => type.name);
+                      const hasChanges = !areTypeSelectionsEqual(selectedTypeIds, activeTypeIds);
+                      const isSaving = savingStateId === state.id;
+
+                      return (
+                        <TableRow key={state.id} className={!state.is_active ? "opacity-60" : undefined}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {state.name}
+                              {!state.is_active && <Badge variant="secondary" className="text-xs">Archived</Badge>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">{state.category}</TableCell>
+                          <TableCell>
+                            <SearchableMultiSelect
+                              options={requestTypes.filter((type) => type.is_active).map((type) => type.name)}
+                              selected={selectedTypeNames}
+                              onChange={(values) => handleSelectionChange(state.id, values)}
+                              allLabel="Select DR request types"
+                              searchPlaceholder="Search DR request types..."
+                              triggerWidth="w-full"
+                              className="h-9"
+                            />
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <Badge variant="outline">{activeTypeIds.length}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleReset(state.id)}
+                                disabled={isSaving || !hasChanges}
+                              >
+                                Reset
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSave(state.id)}
+                                disabled={isSaving || !hasChanges}
+                              >
+                                {isSaving ? "Saving..." : "Save"}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
-              {rules.length > limit && (
+              {totalPages > 1 && (
                 <Pagination
                   page={page}
                   limit={limit}
-                  total={rules.length}
-                  pages={Math.ceil(rules.length / limit)}
+                  total={requestStates.length}
+                  pages={totalPages}
                   onPageChange={setPage}
                 />
               )}
@@ -1106,72 +1081,11 @@ function RulesTab() {
           )}
         </CardContent>
       </Card>
-
-      <Sheet open={isEditSheetOpen} onOpenChange={setIsEditSheetOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Edit Rule</SheetTitle>
-            <SheetDescription>Update control parameter rule</SheetDescription>
-          </SheetHeader>
-          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-6">
-            <div className="space-y-2">
-              <Label htmlFor="edit-request_state_name">Request State</Label>
-              <Input id="edit-request_state_name" {...editForm.register("request_state_name", { required: true })} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-allowed_type_categories">Allowed Type Categories</Label>
-              <select
-                id="edit-allowed_type_categories"
-                {...editForm.register("allowed_type_categories")}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="ALL">ALL</option>
-                <option value="Development">Development</option>
-                <option value="Non Development">Non Development</option>
-                <option value="Development,Non Development">Development, Non Development</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-allowed_priorities">Allowed Priorities</Label>
-              <select
-                id="edit-allowed_priorities"
-                {...editForm.register("allowed_priorities")}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="ALL">ALL</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-allowed_functional_categories">Allowed Functional Categories</Label>
-              <select
-                id="edit-allowed_functional_categories"
-                {...editForm.register("allowed_functional_categories")}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="ALL">ALL</option>
-                {functionalCategories?.map((cat) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? "Saving..." : "Save Changes"}
-            </Button>
-          </form>
-        </SheetContent>
-      </Sheet>
     </TabsContent>
   );
 }
 
-const RELEASE_PLAN_STATE_CATEGORIES = ["Open", "In Progress", "Closed", "Failed/Cancelled"];
+const RELEASE_PLAN_STATE_CATEGORIES = ["Draft", "Planned", "Approved", "Executing", "Closed", "Failed"];
 
 function ReleasePlanStatesTab() {
   const { data: states, isLoading, error } = useReleasePlanStatesAll();
@@ -1186,11 +1100,11 @@ function ReleasePlanStatesTab() {
   const limit = 5;
 
   const createForm = useForm<{ name: string; description: string; category: string; display_order: number }>({
-    defaultValues: { name: "", description: "", category: "Open", display_order: 0 },
+    defaultValues: { name: "", description: "", category: "Draft", display_order: 0 },
   });
 
   const editForm = useForm<{ name: string; description: string; category: string; display_order: number }>({
-    defaultValues: { name: "", description: "", category: "Open", display_order: 0 },
+    defaultValues: { name: "", description: "", category: "Draft", display_order: 0 },
   });
 
   const onSubmit = async (data: { name: string; description: string; category: string; display_order: number }) => {
@@ -1380,7 +1294,7 @@ export function SettingsControlParametersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Control Parameters</h2>
-          <p className="text-muted-foreground">Manage request types, states, priorities, and categories</p>
+          <p className="text-muted-foreground">Manage DR workflow parameters and release plan states</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">Show Archived</span>

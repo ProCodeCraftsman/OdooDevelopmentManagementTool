@@ -15,6 +15,7 @@ from app.models.sync_record import SyncRecord
 from app.models.environment import Environment
 from app.models.development_request import RequestModuleLine, RequestReleasePlanLine
 from app.core.security_matrix import Permission
+from app.api.v1.auth import limiter as auth_limiter
 
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -48,14 +49,15 @@ def db_session():
     db.add_all([admin_role, pm_role, dev_role])
 
     req_type_dev = RequestType(id=1, name="Bug Fix", category="Development", is_active=True)
-    req_type_non_dev = RequestType(id=2, name="Documentation", category="Non Development", is_active=True)
+    req_type_non_dev = RequestType(id=2, name="Documentation", category="Non-development", is_active=True)
     db.add_all([req_type_dev, req_type_non_dev])
 
-    req_state_open = RequestState(id=1, name="Open - Under Review", category="Open", is_active=True, display_order=1)
+    req_state_open = RequestState(id=1, name="Draft - Under Review", category="Draft", is_active=True, display_order=1)
     req_state_in_progress = RequestState(id=2, name="In Progress - Development", category="In Progress", is_active=True, display_order=2)
-    req_state_testing = RequestState(id=4, name="In Progress - Testing (Dev)", category="In Progress", is_active=True, display_order=3)
-    req_state_closed = RequestState(id=3, name="Closed - Released", category="Closed", is_active=True, display_order=4)
-    db.add_all([req_state_open, req_state_in_progress, req_state_testing, req_state_closed])
+    req_state_ready = RequestState(id=4, name="Ready - QA Signoff", category="Ready", is_active=True, display_order=3)
+    req_state_done = RequestState(id=3, name="Done - Released", category="Done", is_active=True, display_order=4)
+    req_state_cancelled = RequestState(id=5, name="Cancelled", category="Cancelled", is_active=True, display_order=5)
+    db.add_all([req_state_open, req_state_in_progress, req_state_ready, req_state_done, req_state_cancelled])
 
     func_cat = FunctionalCategory(id=1, name="Sales", is_active=True)
     func_cat_inactive = FunctionalCategory(id=2, name="HR - Employee", is_active=False)
@@ -95,8 +97,12 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
+    app.state.limiter.reset()
+    auth_limiter.reset()
     with TestClient(app) as test_client:
         yield test_client
+    app.state.limiter.reset()
+    auth_limiter.reset()
     app.dependency_overrides.clear()
 
 
@@ -105,7 +111,7 @@ def admin_user(db_session):
     from app.services.auth_service import auth_service
     hashed = auth_service.hash_password("testpassword")
     admin = User(
-        id=1, username="admin", email="admin@test.com", hashed_password=hashed, role_id=1
+        id=1, username="admin", email="admin@test.com", hashed_password=hashed, roles=[db_session.get(Role, 1)]
     )
     db_session.add(admin)
     db_session.commit()
@@ -117,7 +123,7 @@ def pm_user(db_session):
     from app.services.auth_service import auth_service
     hashed = auth_service.hash_password("testpassword")
     pm = User(
-        id=2, username="pm", email="pm@test.com", hashed_password=hashed, role_id=2
+        id=2, username="pm", email="pm@test.com", hashed_password=hashed, roles=[db_session.get(Role, 2)]
     )
     db_session.add(pm)
     db_session.commit()
@@ -129,7 +135,7 @@ def dev_user(db_session):
     from app.services.auth_service import auth_service
     hashed = auth_service.hash_password("testpassword")
     dev = User(
-        id=3, username="dev", email="dev@test.com", hashed_password=hashed, role_id=3
+        id=3, username="dev", email="dev@test.com", hashed_password=hashed, roles=[db_session.get(Role, 3)]
     )
     db_session.add(dev)
     db_session.commit()
@@ -171,6 +177,7 @@ def open_request(client, admin_headers, dev_user):
     response = client.post(
         "/api/v1/development-requests/requests/",
         json={
+            "title": "Open test request",
             "request_type_id": 1,
             "functional_category_id": 1,
             "priority_id": 1,
@@ -190,6 +197,7 @@ def closed_request(client, admin_headers, dev_user, db_session):
     response = client.post(
         "/api/v1/development-requests/requests/",
         json={
+            "title": "Closed test request",
             "request_type_id": 1,
             "functional_category_id": 1,
             "priority_id": 1,
@@ -220,6 +228,7 @@ def in_progress_request(client, admin_headers, dev_user, db_session):
     response = client.post(
         "/api/v1/development-requests/requests/",
         json={
+            "title": "In Progress request",
             "request_type_id": 1,
             "functional_category_id": 1,
             "priority_id": 1,
@@ -249,6 +258,7 @@ def request_with_partial_deployment(client, admin_headers, dev_user, db_session)
     response = client.post(
         "/api/v1/development-requests/requests/",
         json={
+            "title": "Request with partial deployment",
             "request_type_id": 1,
             "functional_category_id": 1,
             "priority_id": 1,
@@ -291,6 +301,7 @@ def request_with_full_deployment(client, admin_headers, dev_user, db_session):
     response = client.post(
         "/api/v1/development-requests/requests/",
         json={
+            "title": "Request with full deployment",
             "request_type_id": 1,
             "functional_category_id": 1,
             "priority_id": 1,
@@ -362,7 +373,7 @@ class TestRBACMatrixSecurityBoundaries:
             headers=dev_headers,
         )
         assert response.status_code == 403
-        assert "closed requests" in response.json()["detail"].lower()
+        assert "finalised requests" in response.json()["detail"].lower()
 
     def test_1_4_admin_can_edit_closed_ticket(self, client, admin_headers, closed_request):
         """R1 (Admin) can edit Closed ticket - should succeed"""
@@ -398,6 +409,7 @@ class TestStateTransitionsBusinessLogic:
         response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Documentation request",
                 "request_type_id": 2,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -407,13 +419,14 @@ class TestStateTransitionsBusinessLogic:
             headers=admin_headers,
         )
         assert response.status_code == 400
-        assert "Non Development" in response.json()["detail"]
+        assert "not allowed" in response.json()["detail"]
 
     def test_2_2_missing_developer(self, client, admin_headers):
         """Development type requires assigned developer"""
         response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Bug fix without developer",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -536,6 +549,7 @@ class TestDatabaseAnomalies:
         resp_a = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Request A",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -549,6 +563,7 @@ class TestDatabaseAnomalies:
         resp_b = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Request B",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -630,6 +645,7 @@ class TestDevelopmentRequestEndpoints:
         response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Test request",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -643,6 +659,7 @@ class TestDevelopmentRequestEndpoints:
         response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Test request",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -657,6 +674,7 @@ class TestDevelopmentRequestEndpoints:
         response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Test request",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -676,6 +694,7 @@ class TestDevelopmentRequestEndpoints:
         client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Test request",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -704,6 +723,7 @@ class TestDevelopmentRequestEndpoints:
         create_response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Test request",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -728,6 +748,7 @@ class TestDevelopmentRequestEndpoints:
         create_response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Test request",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -745,12 +766,13 @@ class TestDevelopmentRequestEndpoints:
         data = response.json()
         assert data["permissions"]["can_edit_priority"] is False
         assert data["permissions"]["can_edit_state"] is False
-        assert data["permissions"]["current_role_level"] == 3
+        assert data["permissions"]["current_role_level"] == 5
 
     def test_update_request_respects_security_matrix(self, client, admin_headers, dev_headers, dev_user):
         create_response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Test request",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,
@@ -773,6 +795,7 @@ class TestDevelopmentRequestEndpoints:
         create_response = client.post(
             "/api/v1/development-requests/requests/",
             json={
+                "title": "Test request",
                 "request_type_id": 1,
                 "functional_category_id": 1,
                 "priority_id": 1,

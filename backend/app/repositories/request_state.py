@@ -58,7 +58,7 @@ class RequestStateRepository(BaseRepository[RequestState]):
     def get_first_open_state(self) -> RequestState:
         return (
             self.db.query(RequestState)
-            .filter(RequestState.category == "Open", RequestState.is_active == True)
+            .filter(RequestState.category == "Draft", RequestState.is_active == True)
             .order_by(RequestState.display_order)
             .first()
         )

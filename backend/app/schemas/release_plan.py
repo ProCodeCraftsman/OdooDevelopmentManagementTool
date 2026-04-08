@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class ReleasePlanStateBase(BaseModel):
     name: str
     description: Optional[str] = None
-    category: str  # Open / In Progress / Closed / Failed/Cancelled
+    category: str  # Draft / Planned / Approved / Executing / Closed / Failed
     is_active: bool = True
     display_order: int = 0
 

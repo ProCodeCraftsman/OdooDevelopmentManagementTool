@@ -22,20 +22,23 @@ import { ChevronDown } from "lucide-react";
 
 function getStateBadgeClass(category: string): string {
   switch (category?.toLowerCase()) {
-    case "open":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
-    case "in_progress":
+    case "draft":
+      return "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300";
     case "in progress":
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
-    case "closed":
+    case "ready":
+      return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300";
+    case "done":
       return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    case "cancelled":
+      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
   }
 }
 
 function isRejectionState(name: string): boolean {
-  return name.toLowerCase().includes("reject");
+  return name.toLowerCase().includes("cancel");
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +65,7 @@ export function InlineStateEditor({ request, availableStates }: Props) {
   const canEdit = request.permissions?.can_edit_state;
   const canReopen = request.permissions?.can_reopen;
   const currentCategory = request.request_state?.category?.toLowerCase();
-  const isClosed = currentCategory === "closed";
+  const isClosed = currentCategory === "done" || currentCategory === "cancelled";
 
   if (!canEdit && !canReopen) {
     return (
@@ -76,8 +79,7 @@ export function InlineStateEditor({ request, availableStates }: Props) {
     setOpen(false);
     const targetCategory = state.category?.toLowerCase();
 
-    // Reopen: closed → open with mandatory comment
-    if (isClosed && targetCategory === "open" && canReopen) {
+    if (isClosed && targetCategory === "draft" && canReopen) {
       setPendingStateId(state.id);
       setCommentMode("reopen");
       return;
@@ -157,12 +159,12 @@ export function InlineStateEditor({ request, availableStates }: Props) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {commentMode === "reopen" ? "Reopen Request" : "Reject Request"}
+              {commentMode === "reopen" ? "Reopen Request" : "Cancel Request"}
             </DialogTitle>
             <DialogDescription>
               {commentMode === "reopen"
                 ? "A comment is required when reopening a request."
-                : "A comment is required when rejecting a request."}
+                : "A comment is required when cancelling a request."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -174,7 +176,7 @@ export function InlineStateEditor({ request, availableStates }: Props) {
               placeholder={
                 commentMode === "reopen"
                   ? "Explain why this request is being reopened…"
-                  : "Explain why this request is being rejected…"
+                  : "Explain why this request is being cancelled…"
               }
               rows={3}
             />

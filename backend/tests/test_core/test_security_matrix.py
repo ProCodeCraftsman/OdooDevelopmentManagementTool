@@ -3,13 +3,14 @@ from app.core.security_matrix import SecurityMatrixEngine, Permission, StateCate
 
 
 class MockRole:
-    def __init__(self, permissions: list[str]):
+    def __init__(self, permissions: list[str], priority: int = 5):
         self.permissions = permissions
+        self.priority = priority
 
 
 class MockUser:
-    def __init__(self, permissions: list[str]):
-        self.role = MockRole(permissions) if permissions is not None else None
+    def __init__(self, permissions: list[str], priority: int = 5):
+        self.roles = [MockRole(permissions, priority=priority)] if permissions is not None else []
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +27,7 @@ class TestHasPermission:
 
     def test_user_without_role_returns_false(self):
         user = MockUser.__new__(MockUser)
-        user.role = None
+        user.roles = []
         assert not SecurityMatrixEngine.has_permission(user, Permission.DEV_REQUEST_READ)
 
     def test_user_with_empty_permissions_returns_false(self):
@@ -40,17 +41,17 @@ class TestHasPermission:
 class TestStateAwareHelpers:
     def test_can_edit_in_open_state_with_update_permission(self):
         user = MockUser([Permission.DEV_REQUEST_UPDATE])
-        assert SecurityMatrixEngine.can_edit_in_state(user, StateCategory.OPEN)
+        assert SecurityMatrixEngine.can_edit_in_state(user, StateCategory.DRAFT)
 
     def test_cannot_edit_in_open_state_without_update_permission(self):
         user = MockUser([Permission.DEV_REQUEST_READ])
-        assert not SecurityMatrixEngine.can_edit_in_state(user, StateCategory.OPEN)
+        assert not SecurityMatrixEngine.can_edit_in_state(user, StateCategory.DRAFT)
 
     def test_only_system_manage_can_edit_in_closed_state(self):
         admin = MockUser([Permission.SYSTEM_MANAGE, Permission.DEV_REQUEST_UPDATE])
         regular = MockUser([Permission.DEV_REQUEST_UPDATE])
-        assert SecurityMatrixEngine.can_edit_in_state(admin, StateCategory.CLOSED)
-        assert not SecurityMatrixEngine.can_edit_in_state(regular, StateCategory.CLOSED)
+        assert SecurityMatrixEngine.can_edit_in_state(admin, StateCategory.DONE)
+        assert not SecurityMatrixEngine.can_edit_in_state(regular, StateCategory.DONE)
 
     def test_can_transition_state(self):
         user = MockUser([Permission.DEV_REQUEST_STATE_CHANGE])
@@ -79,26 +80,37 @@ class TestFilterAllowedUpdates:
         user = MockUser([Permission.DEV_REQUEST_READ])
         update_data = {"request_type_id": 1, "priority_id": 2}
         allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
-            user, StateCategory.OPEN, update_data
+            user, StateCategory.DRAFT, update_data
         )
         assert "request_type_id" in rejected
         assert "priority_id" in rejected
         assert len(allowed) == 0
 
-    def test_filter_allows_header_fields_with_update_permission(self):
+    def test_filter_rejects_restricted_header_fields_without_system_manage(self):
         user = MockUser([Permission.DEV_REQUEST_UPDATE])
         update_data = {"request_type_id": 1, "priority_id": 2}
         allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
-            user, StateCategory.OPEN, update_data
+            user, StateCategory.DRAFT, update_data
+        )
+        assert "request_type_id" in rejected
+        assert "priority_id" in rejected
+        assert len(allowed) == 0
+
+    def test_filter_allows_general_header_fields_with_update_permission(self):
+        user = MockUser([Permission.DEV_REQUEST_UPDATE])
+        update_data = {"title": "Updated", "description": "Changed"}
+        allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
+            user, StateCategory.DRAFT, update_data
         )
         assert len(rejected) == 0
-        assert "request_type_id" in allowed
+        assert "title" in allowed
+        assert "description" in allowed
 
     def test_filter_allows_comments_with_comments_permission(self):
         user = MockUser([Permission.COMMENTS_CREATE])
         update_data = {"comments": "hello"}
         allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
-            user, StateCategory.OPEN, update_data
+            user, StateCategory.DRAFT, update_data
         )
         assert "comments" in allowed
         assert len(rejected) == 0
@@ -107,7 +119,7 @@ class TestFilterAllowedUpdates:
         user = MockUser([Permission.DEV_REQUEST_UPDATE])
         update_data = {"request_type_id": 1}
         allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
-            user, StateCategory.CLOSED, update_data
+            user, StateCategory.DONE, update_data
         )
         assert "request_type_id" in rejected
 

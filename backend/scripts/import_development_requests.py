@@ -13,7 +13,7 @@ import sys
 import re
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -53,12 +53,14 @@ REQUEST_TYPE_MAPPING = {
 }
 
 STATUS_MAPPING = {
-    "1. open - request under review": "Open - Request under Review",
-    "2. accepted - on hold": "Accepted - On Hold",
-    "3. in progress": "In Progress",
-    "5. closed - development": "Closed - Development",
-    "6. closed - configuration": "Closed - Configuration",
-    "7. rejected": "Rejected",
+    "1. open - request under review": "Draft - Under Review",
+    "2. accepted - on hold": "Draft - Accepted On Hold",
+    "3. in progress": "In Progress - Development",
+    "4. ready": "Ready - QA Signoff",
+    "5. closed - development": "Done - Released",
+    "6. closed - configuration": "Done - Configuration Applied",
+    "7. rejected": "Cancelled - Rejected",
+    "cancelled": "Cancelled",
 }
 
 CATEGORIES_TO_CREATE = [
@@ -115,35 +117,35 @@ def find_excel_file() -> Optional[str]:
     return None
 
 
-def is_valid_request_number(value: any) -> bool:
+def is_valid_request_number(value: Any) -> bool:
     if pd.isna(value):
         return False
     value_str = str(value).strip()
     return bool(re.match(r"^REQ-\d+$", value_str))
 
 
-def normalize_functional_category(value: any) -> Optional[str]:
+def normalize_functional_category(value: Any) -> Optional[str]:
     if pd.isna(value):
         return None
     key = str(value).strip().lower()
     return FUNCTIONAL_CATEGORY_MAPPING.get(key)
 
 
-def normalize_request_type(value: any) -> Optional[str]:
+def normalize_request_type(value: Any) -> Optional[str]:
     if pd.isna(value):
         return None
     key = str(value).strip().lower()
     return REQUEST_TYPE_MAPPING.get(key)
 
 
-def normalize_status(value: any) -> Optional[str]:
+def normalize_status(value: Any) -> Optional[str]:
     if pd.isna(value):
         return None
     key = str(value).strip().lower()
     return STATUS_MAPPING.get(key)
 
 
-def parse_date(value: any) -> Optional[datetime]:
+def parse_date(value: Any) -> Optional[datetime]:
     if pd.isna(value):
         return None
     
@@ -175,7 +177,7 @@ def parse_date(value: any) -> Optional[datetime]:
 
 def load_control_parameters(db) -> dict:
     request_types = {rt.name: rt.id for rt in db.query(RequestType).all()}
-    request_states = {rs.name: rs.id for rt in db.query(RequestState).all()}
+    request_states = {rs.name: rs.id for rs in db.query(RequestState).all()}
     priorities = {p.name: p.id for p in db.query(Priority).all()}
     categories = {fc.name: fc.id for fc in db.query(FunctionalCategory).all()}
     users = {u.username: u.id for u in db.query(User).all()}

@@ -1,3 +1,6 @@
+CLAUDE.md 
+AGENTS.md 
+CONTROL.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -71,6 +74,7 @@ test-results/
 # OpenCode
 .opencode/
 .planning/
+.pytest_cache
 
 # Planning docs (can be regenerated)
 backend/plan.md

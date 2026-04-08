@@ -66,6 +66,17 @@ export interface PriorityBrief {
   level: number;
 }
 
+export interface StateTypeRuleBrief {
+  id: number;
+  request_state_id: number;
+  request_type_id: number;
+  request_state_name: string;
+  request_state_category: string;
+  request_type_name: string;
+  request_type_category: string;
+  is_active: boolean;
+}
+
 export interface RelatedRequestBrief {
   id: number;
   request_number: string;
@@ -368,6 +379,7 @@ export interface ControlParameters {
   request_states: RequestStateBrief[];
   functional_categories: FunctionalCategoryBrief[];
   priorities: PriorityBrief[];
+  state_type_rules: StateTypeRuleBrief[];
 }
 
 // ---------------------------------------------------------------------------
