@@ -22,14 +22,14 @@ class TestEnvironmentEndpoints:
                 "user": "admin",
                 "password": "password123",
                 "order": 1,
-                "category": "development",
+                "category": "Development",
             },
         )
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "TestEnv"
         assert data["order"] == 1
-        assert data["category"] == "development"
+        assert data["category"] == "Development"
 
     def test_create_environment_duplicate_name(self, client, admin_auth_headers):
         client.post(
@@ -55,6 +55,32 @@ class TestEnvironmentEndpoints:
             },
         )
         assert response.status_code == 400
+
+    def test_create_environment_duplicate_url(self, client, admin_auth_headers):
+        client.post(
+            "/api/v1/environments/",
+            headers=admin_auth_headers,
+            json={
+                "name": "URLTest1",
+                "url": "https://duplicate.example.com",
+                "db_name": "test_db1",
+                "user": "admin",
+                "password": "password123",
+            },
+        )
+        response = client.post(
+            "/api/v1/environments/",
+            headers=admin_auth_headers,
+            json={
+                "name": "URLTest2",
+                "url": "https://duplicate.example.com",
+                "db_name": "test_db2",
+                "user": "admin",
+                "password": "password123",
+            },
+        )
+        assert response.status_code == 400
+        assert "URL" in response.json()["detail"]
 
     def test_get_environment_by_name(self, client, admin_auth_headers):
         client.post(
@@ -92,11 +118,11 @@ class TestEnvironmentEndpoints:
         response = client.patch(
             "/api/v1/environments/UpdateTest",
             headers=admin_auth_headers,
-            json={"order": 5, "category": "staging"},
+            json={"order": 5, "category": "Staging"},
         )
         assert response.status_code == 200
         assert response.json()["order"] == 5
-        assert response.json()["category"] == "staging"
+        assert response.json()["category"] == "Staging"
 
     def test_delete_environment(self, client, admin_auth_headers):
         client.post(
@@ -129,3 +155,22 @@ class TestEnvironmentEndpoints:
             },
         )
         assert response.status_code == 403
+
+    def test_get_environment_modules(self, client, admin_auth_headers):
+        client.post(
+            "/api/v1/environments/",
+            headers=admin_auth_headers,
+            json={
+                "name": "ModulesTest",
+                "url": "https://modules.example.com",
+                "db_name": "test_db",
+                "user": "admin",
+                "password": "password123",
+            },
+        )
+        response = client.get("/api/v1/environments/ModulesTest/modules/", headers=admin_auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert "pagination" in data
+        assert data["pagination"]["total_records"] == 0

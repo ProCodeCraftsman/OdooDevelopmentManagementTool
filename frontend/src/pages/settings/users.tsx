@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Pencil, Trash2, User as UserIcon } from "lucide-react";
+import { Pencil, Archive, UserPlus, User as UserIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,98 +14,289 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useUsers, useUpdateUser, useDeleteUser } from "@/hooks/useUsers";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DataTable } from "@/components/ui/data-table";
+import {
+  useUsers,
+  useCreateUser,
+  useUpdateUser,
+} from "@/hooks/useUsers";
 import { useRoles } from "@/hooks/useRoles";
 import type { User } from "@/api/users";
-import type { UserUpdate } from "@/api/users";
+import type { UserCreate, UserUpdate } from "@/api/users";
+import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
+import { isAxiosError } from "axios";
 
-const userSchema = z.object({
+// ── Schemas ────────────────────────────────────────────────────────────────
+
+const createUserSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  email: z.string().email("Invalid email"),
+  password: z.string().min(1, "Password is required"),
+  role_ids: z.array(z.number()),
+});
+
+const editUserSchema = z.object({
   username: z.string().min(1, "Username is required"),
   email: z.string().email("Invalid email"),
   password: z.string().optional(),
-  is_admin: z.boolean(),
   is_active: z.boolean(),
-  role_id: z.number().nullable(),
+  role_ids: z.array(z.number()),
 });
 
-type UserFormData = z.infer<typeof userSchema>;
+type CreateFormData = z.infer<typeof createUserSchema>;
+type EditFormData = z.infer<typeof editUserSchema>;
+
+// ── Role multi-select ──────────────────────────────────────────────────────
+
+function RoleCheckboxList({
+  roles,
+  selected,
+  onChange,
+}: {
+  roles: { id: number; name: string }[];
+  selected: number[];
+  onChange: (ids: number[]) => void;
+}) {
+  const toggle = (id: number) => {
+    onChange(
+      selected.includes(id)
+        ? selected.filter((x) => x !== id)
+        : [...selected, id]
+    );
+  };
+
+  if (!roles.length) {
+    return <p className="text-sm text-muted-foreground">No roles available</p>;
+  }
+
+  return (
+    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+      {roles.map((role) => (
+        <label
+          key={role.id}
+          className="flex items-center gap-2 cursor-pointer select-none"
+        >
+          <Checkbox
+            checked={selected.includes(role.id)}
+            onCheckedChange={() => toggle(role.id)}
+          />
+          <span className="text-sm">{role.name}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────
 
 export function SettingsUsersPage() {
   const { data: users, isLoading } = useUsers();
   const { data: roles } = useRoles();
+  const createUser = useCreateUser();
   const updateUser = useUpdateUser();
-  const deleteUser = useDeleteUser();
 
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [userToArchive, setUserToArchive] = useState<User | null>(null);
 
-  const form = useForm<UserFormData>({
-    resolver: zodResolver(userSchema),
+  // ── Create form ──────────────────────────────────────────────────────────
+
+  const createForm = useForm<CreateFormData>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: { username: "", email: "", password: "", role_ids: [] },
+  });
+
+  const onCreateSubmit = async (formData: CreateFormData) => {
+    try {
+      const payload: UserCreate = {
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        role_ids: formData.role_ids,
+      };
+      await createUser.mutateAsync(payload);
+      setCreateDialogOpen(false);
+      createForm.reset();
+    } catch (err) {
+      const detail = isAxiosError(err) ? err.response?.data?.detail : null;
+      if (detail === "Email already taken") {
+        createForm.setError("email", { message: "Email already taken" });
+      } else if (detail === "Username already taken") {
+        createForm.setError("username", { message: "Username already taken" });
+      } else {
+        toast.error("Failed to create user");
+      }
+    }
+  };
+
+  // ── Edit form ────────────────────────────────────────────────────────────
+
+  const editForm = useForm<EditFormData>({
+    resolver: zodResolver(editUserSchema),
     defaultValues: {
       username: "",
       email: "",
       password: "",
-      is_admin: false,
       is_active: true,
-      role_id: null,
+      role_ids: [],
     },
   });
 
-  const onSubmit = async (formData: UserFormData) => {
-    if (!editingUser) return;
-    
-    try {
-      const updateData: UserUpdate = {
-        username: formData.username,
-        email: formData.email,
-        is_admin: formData.is_admin,
-        is_active: formData.is_active,
-        role_id: formData.role_id,
-      };
-      
-      if (formData.password) {
-        updateData.password = formData.password;
-      }
-      
-      await updateUser.mutateAsync({ id: editingUser.id, data: updateData });
-      setEditDialogOpen(false);
-      setEditingUser(null);
-      form.reset();
-    } catch {
-      toast.error("Failed to update user");
-    }
-  };
-
   const handleEdit = (user: User) => {
     setEditingUser(user);
-    form.reset({
+    editForm.reset({
       username: user.username,
       email: user.email,
       password: "",
-      is_admin: user.is_admin,
       is_active: user.is_active,
-      role_id: user.role_id,
+      role_ids: user.roles.map((r) => r.id),
     });
     setEditDialogOpen(true);
   };
 
-  const handleDelete = async () => {
-    if (!userToDelete) return;
+  const onEditSubmit = async (formData: EditFormData) => {
+    if (!editingUser) return;
     try {
-      await deleteUser.mutateAsync(userToDelete.id);
-      setDeleteDialogOpen(false);
-      setUserToDelete(null);
-    } catch {
-      toast.error("Failed to delete user");
+      const payload: UserUpdate = {
+        username: formData.username,
+        email: formData.email,
+        is_active: formData.is_active,
+        role_ids: formData.role_ids,
+      };
+      if (formData.password) {
+        payload.password = formData.password;
+      }
+      await updateUser.mutateAsync({ id: editingUser.id, data: payload });
+      setEditDialogOpen(false);
+      setEditingUser(null);
+      editForm.reset();
+    } catch (err) {
+      const detail = isAxiosError(err) ? err.response?.data?.detail : null;
+      if (detail === "Email already taken") {
+        editForm.setError("email", { message: "Email already taken" });
+      } else if (detail === "Username already taken") {
+        editForm.setError("username", { message: "Username already taken" });
+      } else {
+        toast.error("Failed to update user");
+      }
     }
   };
+
+  // ── Archive ──────────────────────────────────────────────────────────────
+
+  const handleArchiveConfirm = async () => {
+    if (!userToArchive) return;
+    try {
+      await updateUser.mutateAsync({
+        id: userToArchive.id,
+        data: { is_active: false },
+      });
+      toast.success(`${userToArchive.username} has been archived`);
+      setArchiveDialogOpen(false);
+      setUserToArchive(null);
+    } catch {
+      toast.error("Failed to archive user");
+    }
+  };
+
+  // ── Columns ───────────────────────────────────────────────────────────────
+
+  const columns = useMemo<ColumnDef<User>[]>(
+    () => [
+      {
+        id: "user",
+        header: "User",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium shrink-0">
+              {row.original.username.charAt(0).toUpperCase()}
+            </div>
+            <span className="font-medium">{row.original.username}</span>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ getValue }) => (
+          <span className="text-sm text-muted-foreground">{getValue<string>()}</span>
+        ),
+      },
+      {
+        id: "roles",
+        header: "Roles",
+        cell: ({ row }) => {
+          const userRoles = row.original.roles;
+          if (!userRoles.length)
+            return <span className="text-sm text-muted-foreground">No roles</span>;
+          return (
+            <div className="flex flex-wrap gap-1">
+              {userRoles.map((r) => (
+                <Badge key={r.id} variant="outline">
+                  {r.name}
+                </Badge>
+              ))}
+            </div>
+          );
+        },
+      },
+      {
+        id: "status",
+        header: "Status",
+        cell: ({ row }) => (
+          <Badge variant={row.original.is_active ? "default" : "secondary"}>
+            {row.original.is_active ? "Active" : "Archived"}
+          </Badge>
+        ),
+      },
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => handleEdit(row.original)}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            {row.original.is_active && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Archive user"
+                onClick={() => {
+                  setUserToArchive(row.original);
+                  setArchiveDialogOpen(true);
+                }}
+              >
+                <Archive className="h-4 w-4 text-amber-500" />
+              </Button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const emptyState = (
+    <div className="flex flex-col items-center justify-center py-12">
+      <UserIcon className="h-12 w-12 text-muted-foreground mb-4" />
+      <p className="text-lg font-medium">No users found</p>
+    </div>
+  );
+
+  const activeRoles = roles?.filter((r) => r.is_active) ?? [];
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -114,163 +305,150 @@ export function SettingsUsersPage() {
           <h2 className="text-xl md:text-2xl font-bold">Manage Users</h2>
           <p className="text-muted-foreground text-sm">View and manage user accounts</p>
         </div>
+        <Button onClick={() => setCreateDialogOpen(true)}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Add User
+        </Button>
       </div>
 
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardHeader>
-                <Skeleton className="h-6 w-32" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-4 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : users?.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <UserIcon className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium">No users found</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[700px]">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left text-sm font-medium">User</th>
-                <th className="px-4 py-3 text-left text-sm font-medium hidden md:table-cell">Email</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">Role</th>
-                <th className="px-4 py-3 text-left text-sm font-medium hidden sm:table-cell">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-medium hidden sm:table-cell">Admin</th>
-                <th className="px-4 py-3 text-right text-sm font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users?.map((user) => (
-                <tr key={user.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium shrink-0">
-                        {user.username.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-medium">{user.username}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
-                    {user.email}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant="outline">
-                      {user.role?.name || "No Role"}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <Badge variant={user.is_active ? "default" : "secondary"}>
-                      {user.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    {user.is_admin ? (
-                      <Badge variant="destructive">Admin</Badge>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(user)} className="h-8 w-8">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setUserToDelete(user);
-                          setDeleteDialogOpen(true);
-                        }}
-                        className="h-8 w-8"
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        data={users ?? []}
+        loading={isLoading}
+        searchable={false}
+        emptyState={emptyState}
+      />
 
+      {/* ── Create User Dialog ───────────────────────────────────────────── */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add User</DialogTitle>
+            <DialogDescription>Create a new user account</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="create-username">Username</Label>
+              <Input id="create-username" {...createForm.register("username")} />
+              {createForm.formState.errors.username && (
+                <p className="text-sm text-red-500">
+                  {createForm.formState.errors.username.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-email">Email</Label>
+              <Input id="create-email" type="email" {...createForm.register("email")} />
+              {createForm.formState.errors.email && (
+                <p className="text-sm text-red-500">
+                  {createForm.formState.errors.email.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-password">Password</Label>
+              <Input
+                id="create-password"
+                type="password"
+                {...createForm.register("password")}
+              />
+              {createForm.formState.errors.password && (
+                <p className="text-sm text-red-500">
+                  {createForm.formState.errors.password.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Roles</Label>
+              <RoleCheckboxList
+                roles={activeRoles}
+                selected={createForm.watch("role_ids")}
+                onChange={(ids) => createForm.setValue("role_ids", ids)}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCreateDialogOpen(false);
+                  createForm.reset();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createUser.isPending}>
+                Create
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit User Dialog ─────────────────────────────────────────────── */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
-              Update user account settings
-            </DialogDescription>
+            <DialogDescription>Update user account settings</DialogDescription>
           </DialogHeader>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input id="username" {...form.register("username")} />
-              {form.formState.errors.username && (
-                <p className="text-sm text-red-500">{form.formState.errors.username.message}</p>
+              <Label htmlFor="edit-username">Username</Label>
+              <Input id="edit-username" {...editForm.register("username")} />
+              {editForm.formState.errors.username && (
+                <p className="text-sm text-red-500">
+                  {editForm.formState.errors.username.message}
+                </p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" {...form.register("email")} />
-              {form.formState.errors.email && (
-                <p className="text-sm text-red-500">{form.formState.errors.email.message}</p>
+              <Label htmlFor="edit-email">Email</Label>
+              <Input id="edit-email" type="email" {...editForm.register("email")} />
+              {editForm.formState.errors.email && (
+                <p className="text-sm text-red-500">
+                  {editForm.formState.errors.email.message}
+                </p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">New Password (leave blank to keep current)</Label>
-              <Input id="password" type="password" {...form.register("password")} />
+              <Label htmlFor="edit-password">New Password (leave blank to keep current)</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                {...editForm.register("password")}
+              />
             </div>
             <div className="space-y-2">
-              <Label>Role</Label>
-              <Select
-                value={form.watch("role_id")?.toString() || "none"}
-                onValueChange={(val) => form.setValue("role_id", val === "none" ? null : parseInt(val))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Role</SelectItem>
-                  {roles?.map((role) => (
-                    <SelectItem key={role.id} value={role.id.toString()}>
-                      {role.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Roles</Label>
+              <RoleCheckboxList
+                roles={activeRoles}
+                selected={editForm.watch("role_ids")}
+                onChange={(ids) => editForm.setValue("role_ids", ids)}
+              />
             </div>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  {...form.register("is_admin")}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm">Admin</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  {...form.register("is_active")}
-                  className="rounded border-gray-300"
-                />
-                <span className="text-sm">Active</span>
-              </label>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="edit-is-active"
+                checked={editForm.watch("is_active")}
+                onCheckedChange={(checked) =>
+                  editForm.setValue("is_active", checked === true)
+                }
+              />
+              <Label htmlFor="edit-is-active" className="cursor-pointer">
+                Active
+              </Label>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditDialogOpen(false);
+                  setEditingUser(null);
+                  editForm.reset();
+                }}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={updateUser.isPending}>
@@ -281,20 +459,27 @@ export function SettingsUsersPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      {/* ── Archive Confirmation Dialog ──────────────────────────────────── */}
+      <Dialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
+            <DialogTitle>Archive User</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{userToDelete?.username}"? This action cannot be undone.
+              Archive "{userToArchive?.username}"? They will no longer be able to log in
+              but their data will be preserved. You can reactivate them by editing the
+              user.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setArchiveDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleteUser.isPending}>
-              Delete
+            <Button
+              variant="destructive"
+              onClick={handleArchiveConfirm}
+              disabled={updateUser.isPending}
+            >
+              Archive
             </Button>
           </DialogFooter>
         </DialogContent>

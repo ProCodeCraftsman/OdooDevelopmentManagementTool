@@ -154,3 +154,10 @@ export function useToggleControlParameterRule() {
     },
   });
 }
+
+export function useFunctionalCategories() {
+  return useQuery({
+    queryKey: [...controlParamKeys.list("functional-categories")],
+    queryFn: () => controlParametersApi.listAll("functional-categories"),
+  });
+}

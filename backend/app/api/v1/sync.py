@@ -31,6 +31,40 @@ def run_sync_job(job_id: str):
         db.close()
 
 
+@router.post("/sync-all", response_model=list[SyncJobResponse])
+def trigger_sync_all(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.repositories.environment import EnvironmentRepository
+    env_repo = EnvironmentRepository(db)
+    environments = env_repo.get_active()
+    
+    job_ids = []
+    for env in environments:
+        sync_service = SyncService(db)
+        job_id = sync_service.create_sync_job(env.name)
+        if job_id:
+            background_tasks.add_task(run_sync_job, str(job_id))
+            job_ids.append(job_id)
+    
+    sync_service = SyncService(db)
+    results = []
+    for jid in job_ids:
+        status = sync_service.get_job_status(jid)
+        if status:
+            results.append(SyncJobResponse(
+                job_id=str(jid),
+                status=status.get("status", "pending"),
+                progress_percent=status.get("progress_percent", 0),
+                error_message=status.get("error_message"),
+                started_at=status.get("started_at"),
+                completed_at=status.get("completed_at"),
+            ))
+    return results
+
+
 @router.post("/{env_name}", response_model=SyncJobResponse)
 def trigger_sync(
     env_name: str,
@@ -92,35 +126,37 @@ def get_sync_status(
     return SyncJobResponse(**job_status)
 
 
-@router.post("/{env_name}/sync-all", response_model=list[SyncJobResponse])
-def trigger_sync_all(
-    background_tasks: BackgroundTasks,
+@router.get("/{env_name}/last-sync", response_model=SyncJobResponse)
+def get_last_sync_status(
+    env_name: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     from app.repositories.environment import EnvironmentRepository
     env_repo = EnvironmentRepository(db)
-    environments = env_repo.get_active()
+    env = env_repo.get_by_name(env_name)
     
-    job_ids = []
-    for env in environments:
-        sync_service = SyncService(db)
-        job_id = sync_service.create_sync_job(env.name)
-        if job_id:
-            background_tasks.add_task(run_sync_job, str(job_id))
-            job_ids.append(job_id)
+    if not env:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Environment '{env_name}' not found",
+        )
     
-    sync_service = SyncService(db)
-    results = []
-    for jid in job_ids:
-        status = sync_service.get_job_status(jid)
-        if status:
-            results.append(SyncJobResponse(
-                job_id=str(jid),
-                status=status.get("status", "pending"),
-                progress_percent=status.get("progress_percent", 0),
-                error_message=status.get("error_message"),
-                started_at=status.get("started_at"),
-                completed_at=status.get("completed_at"),
-            ))
-    return results
+    from app.repositories.sync_record import SyncRecordRepository
+    sync_repo = SyncRecordRepository(db)
+    last_sync = sync_repo.get_latest_completed_for_environment(env.id)
+    
+    if not last_sync:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No sync records found for this environment",
+        )
+    
+    return SyncJobResponse(
+        job_id=str(last_sync.job_id),
+        status=last_sync.status.value if hasattr(last_sync.status, 'value') else last_sync.status,
+        progress_percent=last_sync.progress_percent,
+        error_message=last_sync.error_message,
+        started_at=last_sync.started_at.isoformat() if last_sync.started_at else None,
+        completed_at=last_sync.completed_at.isoformat() if last_sync.completed_at else None,
+    )

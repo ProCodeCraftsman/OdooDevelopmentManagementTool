@@ -1,5 +1,4 @@
 from typing import Optional, Tuple
-from functools import cmp_to_key
 
 
 INVALID_VERSIONS = {"", "None", "N/A", "Missing Module"}
@@ -50,6 +49,32 @@ def _compare_tuples(a: Optional[Tuple[int, ...]], b: Optional[Tuple[int, ...]]) 
         elif a_norm[i] < b_norm[i]:
             return -1
     return 0
+
+
+def calculate_drift_action(
+    source_version: Optional[str],
+    dest_version: Optional[str],
+    source_env_name: str,
+    dest_env_name: str,
+) -> Tuple[str, Optional[str]]:
+    """Compute (action, missing_env) for a single sliding-window pair.
+
+    Action strings (categorical):
+        "Upgrade", "Error (Downgrade)", "No Action",
+        "Missing Module", "Error (Missing in Source)"
+    missing_env: the specific env name that is missing (hybrid field), or None.
+    """
+    src_is_na = not source_version or source_version.strip() in INVALID_VERSIONS
+    dst_is_na = not dest_version or dest_version.strip() in INVALID_VERSIONS
+
+    if src_is_na:
+        return "Error (Missing in Source)", source_env_name
+
+    if dst_is_na:
+        return "Missing Module", dest_env_name
+
+    action = calculate_release_action(source_version, dest_version)
+    return action, None
 
 
 def parse_version_components(version_string: str) -> dict:

@@ -1,22 +1,89 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RefreshCw, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTriggerSync } from "@/hooks/useSync";
 import { useSyncStatus } from "@/hooks/useSync";
+import { useQueryClient } from "@tanstack/react-query";
+import { environmentKeys } from "@/hooks/useEnvironments";
 import { toast } from "sonner";
+
+const SYNC_TIMEOUT_MS = 60_000;
 
 export function SyncButton({ environmentName }: { environmentName: string }) {
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const triggerSync = useTriggerSync();
-  const { data: syncStatus } = useSyncStatus(currentJobId);
+  const { data: syncStatus, error: syncError } = useSyncStatus(currentJobId);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isRunning = syncStatus?.status === "running" || syncStatus?.status === "pending";
 
+  const clearSyncState = () => {
+    setCurrentJobId(null);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  };
+
+  // Completed or failed
+  useEffect(() => {
+    if (syncStatus?.status === "completed" || syncStatus?.status === "failed") {
+      toast.dismiss(`sync-${environmentName}`);
+      clearSyncState();
+
+      queryClient.invalidateQueries({ queryKey: environmentKeys.modules(environmentName) });
+      queryClient.invalidateQueries({ queryKey: environmentKeys.dependencies(environmentName) });
+      queryClient.invalidateQueries({ queryKey: environmentKeys.detail(environmentName) });
+      queryClient.invalidateQueries({ queryKey: environmentKeys.filterOptions(environmentName) });
+      queryClient.invalidateQueries({ queryKey: ["environments", "list"] });
+
+      if (syncStatus.status === "completed") {
+        toast.success(`${environmentName} synced successfully`);
+      } else {
+        toast.error(`${environmentName} sync failed`, {
+          description: syncStatus.error_message || "Unknown error",
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncStatus?.status, environmentName, queryClient]);
+
+  // Query error (e.g. job record not found — 404)
+  useEffect(() => {
+    if (syncError && currentJobId) {
+      toast.dismiss(`sync-${environmentName}`);
+      clearSyncState();
+      toast.error(`${environmentName} sync status unavailable`, {
+        description: "Lost track of sync job. Check server logs.",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncError, currentJobId, environmentName]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
   const handleSync = async () => {
+    if (isRunning || triggerSync.isPending) return;
     try {
       const result = await triggerSync.mutateAsync(environmentName);
       setCurrentJobId(result.job_id);
-      toast.success(`Sync started for ${environmentName}`);
+      toast.loading(`Syncing ${environmentName}...`, { id: `sync-${environmentName}`, duration: Infinity });
+
+      // Client-side guard: give up after 60 s if no terminal state received
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        toast.dismiss(`sync-${environmentName}`);
+        clearSyncState();
+        toast.error(`${environmentName} sync timed out`, {
+          description: "No response after 60 s. Check Odoo server connection.",
+        });
+      }, SYNC_TIMEOUT_MS);
     } catch {
       toast.error("Failed to start sync");
     }

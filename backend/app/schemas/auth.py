@@ -12,12 +12,18 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class RefreshRequest(BaseModel):
+    """Body payload for /auth/refresh when cookie fallback is needed."""
+    # Normally the refresh token comes via httpOnly cookie; this field is
+    # not used by the endpoint but kept for documentation/testing purposes.
+    pass
+
+
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
-    is_admin: bool = False
-    role_id: int | None = None
+    role_ids: list[int] = []
 
 
 class UserResponse(BaseModel):
@@ -25,9 +31,7 @@ class UserResponse(BaseModel):
     username: str
     email: str
     is_active: bool
-    is_admin: bool
-    role_id: int | None = None
-    role: RoleBrief | None = None
+    roles: list[RoleBrief] = []
 
     class Config:
         from_attributes = True
@@ -37,6 +41,5 @@ class UserUpdate(BaseModel):
     username: str | None = None
     email: EmailStr | None = None
     password: str | None = None
-    is_admin: bool | None = None
     is_active: bool | None = None
-    role_id: int | None = None
+    role_ids: list[int] | None = None

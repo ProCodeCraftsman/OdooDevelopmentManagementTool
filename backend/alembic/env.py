@@ -14,6 +14,8 @@ from app.models.user import User
 from app.models.environment import Environment
 from app.models.module import Module
 from app.models.sync_record import SyncRecord
+from app.models.module_dependency import ModuleDependency  # noqa: F401
+from app.models.comparison_report import ComparisonReportRow, ReportMetadata  # noqa: F401
 
 target_metadata = Base.metadata
 

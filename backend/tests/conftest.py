@@ -60,7 +60,6 @@ def sample_user(db_session):
         username="testuser",
         email="test@example.com",
         password="testpassword123",
-        is_admin=False,
     )
     return user
 
@@ -68,13 +67,26 @@ def sample_user(db_session):
 @pytest.fixture
 def admin_user(db_session):
     from app.repositories.user import UserRepository
+    from app.models.role import Role
+
+    db_session.add(
+        Role(
+            id=1,
+            name="Super Admin",
+            permissions=["system:manage", "dev_request:read", "dev_request:create",
+                         "dev_request:update", "dev_request:state_change"],
+            priority=1,
+            is_active=True,
+        )
+    )
+    db_session.flush()
 
     user_repo = UserRepository(db_session)
     user = user_repo.create_user(
         username="admin",
         email="admin@example.com",
         password="adminpassword123",
-        is_admin=True,
+        role_id=1,
     )
     return user
 

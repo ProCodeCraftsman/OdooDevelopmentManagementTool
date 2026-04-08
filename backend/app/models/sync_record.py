@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Index
+from typing import Optional, Dict
+from sqlalchemy import String, Integer, ForeignKey, Index, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
@@ -22,10 +22,10 @@ class SyncRecord(Base):
         default=uuid.uuid4, index=True
     )
     environment_id: Mapped[int] = mapped_column(
-        ForeignKey("environments.id"), index=True
+        ForeignKey("environments.id", ondelete="CASCADE"), index=True
     )
     module_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("modules.id"), nullable=True
+        ForeignKey("modules.id", ondelete="CASCADE"), nullable=True
     )
 
     version_major: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -33,6 +33,8 @@ class SyncRecord(Base):
     version_patch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     version_build: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     version_string: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    dependencies: Mapped[Optional[Dict[str, str]]] = mapped_column(JSON, nullable=True)
 
     state: Mapped[str] = mapped_column(String(50), nullable=True)
     status: Mapped[SyncStatus] = mapped_column(

@@ -17,6 +17,7 @@ import {
   Sliders,
   Sun,
   Moon,
+  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
@@ -37,6 +38,7 @@ import {
 const mainNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Development Requests", href: "/development-requests", icon: ClipboardList },
+  { title: "Release Plans", href: "/release-plans", icon: GitBranch },
   { title: "Modules", href: "/modules", icon: Package },
   { title: "Environments", href: "/environments", icon: Server },
   { title: "Reports", href: "/reports/comparison", icon: FileText },
@@ -142,7 +144,7 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, onToggleSe
 
   return (
     <>
-      <nav className="flex-1 space-y-1 p-2">
+      <nav className="flex-1 space-y-1 p-2 overflow-y-auto">
         {mainNavItems.map((item) => (
           <NavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
         ))}
@@ -192,7 +194,7 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, onToggleSe
         )}
       </nav>
 
-      <div className="border-t p-2 space-y-1">
+      <div className="border-t p-2 space-y-1 sticky bottom-0 bg-background">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
             {user?.username?.charAt(0).toUpperCase() || "U"}
@@ -249,7 +251,7 @@ export function Sidebar() {
   const [settingsExpandedState, setSettingsExpandedState] = useState(false);
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
-  const isAdmin = user?.is_admin ?? false;
+  const isAdmin = user?.roles?.some((r) => r.permissions?.includes("system:manage")) ?? false;
 
   const settingsExpanded = userToggledSettings 
     ? settingsExpandedState 

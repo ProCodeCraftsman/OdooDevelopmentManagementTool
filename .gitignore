@@ -1,3 +1,4 @@
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -84,6 +85,13 @@ Legacy/data/
 Legacy/*.csv
 Legacy/environments.json
 
+# Git worktrees
+.git/worktrees/
+# Claude settings
+.claude/
+# Legacy (old code)
+Legacy/
+
 # Testing
 .coverage
 htmlcov/
@@ -95,3 +103,12 @@ summary of actions taken/
 # Sensitive scripts with hardcoded credentials
 # Only commit seed scripts that are safe for public repositories
 backend/scripts/seed_*.py
+
+# Git worktrees
+.git/worktrees/
+
+# Claude settings
+.claude/
+
+# Legacy (old code)
+Legacy/

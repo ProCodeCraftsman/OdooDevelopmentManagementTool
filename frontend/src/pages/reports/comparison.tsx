@@ -1,248 +1,757 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useMemo, useState } from "react";
+import { type ColumnDef, type PaginationState, type SortingState } from "@tanstack/react-table";
+import {
+  AlertCircle,
+  CheckCircle,
+  Download,
+  FileBarChart,
+  Loader2,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+  XCircle,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { reportsApi } from "@/api/reports";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useComparisonReport } from "@/hooks/useReports";
+import { Card, CardContent } from "@/components/ui/card";
+import { DataTable, DataTableColumnHeader } from "@/components/ui/data-table";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  useComparisonFilterOptions,
+  useDriftFilterOptions,
+  useGenerateReport,
+  usePaginatedDrift,
+  usePaginatedReport,
+  useReportMetadata,
+} from "@/hooks/useReports";
+import { useTriggerSyncAll } from "@/hooks/useSync";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle, TrendingUp, TrendingDown, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
+import type {
+  ActionCountsMap,
+  DriftSummaryCounts,
+  ReportRowResponse,
+  ReportVersionCell,
+  VersionDriftEntry,
+} from "@/types/api";
 
-type ActionType = "upgrade" | "downgrade" | "missing" | "missing_source" | "ok" | "none";
+// ─── Shared helpers ───────────────────────────────────────────────────────────
 
-function getActionType(action: string | null | undefined): ActionType {
-  if (!action) return "none";
-  const lower = action.toLowerCase();
-  if (lower.includes("upgrade")) return "upgrade";
-  if (lower.includes("downgrade")) return "downgrade";
-  if (lower.includes("missing module")) return "missing";
-  if (lower.includes("missing in source")) return "missing_source";
-  if (lower.includes("no action")) return "ok";
-  return "none";
+function joinFilter(values: string[]): string | undefined {
+  return values.length > 0 ? values.join(",") : undefined;
 }
 
-function ActionBadge({ action }: { action: string | null | undefined }) {
-  const type = getActionType(action);
-  
-  const config = {
-    upgrade: {
-      icon: TrendingUp,
-      className: "bg-green-100 text-green-800 border-green-300 hover:bg-green-100",
-      label: "Upgrade",
-    },
-    downgrade: {
-      icon: TrendingDown,
-      className: "bg-red-100 text-red-800 border-red-300 hover:bg-red-100",
-      label: "Downgrade",
-    },
-    missing: {
-      icon: XCircle,
-      className: "bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-100",
-      label: "Missing",
-    },
-    missing_source: {
-      icon: AlertCircle,
-      className: "bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-100",
-      label: "Source Error",
-    },
-    ok: {
-      icon: CheckCircle,
-      className: "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-100",
-      label: "Synced",
-    },
-    none: {
-      icon: null,
-      className: "",
-      label: "",
-    },
-  };
+// ─── Action badge (used in both tabs) ────────────────────────────────────────
 
-  const { icon: Icon, className } = config[type];
+function ActionBadge({ action, missingEnv }: { action?: string | null; missingEnv?: string | null }) {
+  if (!action) return <span className="text-muted-foreground text-xs">—</span>;
 
-  if (type === "none") return null;
+  const lower = action.toLowerCase();
+  const isUpgrade = lower.includes("upgrade");
+  const isDowngrade = lower.includes("downgrade");
+  const isMissingModule = lower === "missing module";
+  const isMissingSource = lower.includes("missing in source");
+  const isNoAction = lower === "no action";
+
+  const config = isUpgrade
+    ? { icon: TrendingUp, className: "bg-green-100 text-green-800 border-green-300 hover:bg-green-100" }
+    : isDowngrade
+    ? { icon: TrendingDown, className: "bg-red-100 text-red-800 border-red-300 hover:bg-red-100" }
+    : isMissingModule
+    ? { icon: XCircle, className: "bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-100" }
+    : isMissingSource
+    ? { icon: AlertCircle, className: "bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-100" }
+    : isNoAction
+    ? { icon: CheckCircle, className: "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-100" }
+    : { icon: CheckCircle, className: "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-100" };
+
+  const Icon = config.icon;
+  const label = (isMissingModule || isMissingSource) && missingEnv ? `${action} (${missingEnv})` : action;
 
   return (
-    <Badge className={cn("gap-1 text-xs", className)}>
-      {Icon && <Icon className="h-3 w-3" />}
-      {action}
+    <Badge className={cn("gap-1 text-xs whitespace-nowrap", config.className)}>
+      <Icon className="h-3 w-3 shrink-0" />
+      {label}
     </Badge>
   );
 }
 
-export function ComparisonPage() {
-  const { data: report, isLoading, refetch, isRefetching } = useComparisonReport();
-  const [showAll, setShowAll] = useState(false);
+// ─── Version cell (comparison summary tab) ────────────────────────────────────
 
-  if (isLoading) {
+function VersionCell({ data }: { data?: ReportVersionCell }) {
+  if (!data) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold">Comparison Report</h2>
-          <p className="text-muted-foreground">Version matrix across environments</p>
-        </div>
-        <Card>
-          <CardContent className="p-6">
-            <Skeleton className="h-64 w-full" />
+      <Badge variant="outline" className="text-xs px-1.5 py-0 text-muted-foreground border-dashed">
+        N/A
+      </Badge>
+    );
+  }
+  const isMissing = data.version === "N/A" || data.version == null;
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <Badge
+        variant={isMissing ? "outline" : "secondary"}
+        className={cn("text-xs px-1.5 py-0", isMissing && "text-muted-foreground border-dashed")}
+      >
+        {data.version ?? "N/A"}
+      </Badge>
+      {data.last_sync && (
+        <span className="text-[10px] text-muted-foreground">
+          {new Date(
+            data.last_sync.endsWith("Z") || data.last_sync.includes("+")
+              ? data.last_sync
+              : data.last_sync + "Z"
+          ).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Action Counts display (comparison summary tab) ───────────────────────────
+
+function ActionCountsSummary({ counts }: { counts?: ActionCountsMap | null }) {
+  if (!counts) return <span className="text-muted-foreground text-xs">—</span>;
+
+  const upgrades = counts["Upgrade"] ?? 0;
+  const downgrades = counts["Error (Downgrade)"] ?? 0;
+  const missing =
+    (counts["Missing Module"] ?? 0) + (counts["Error (Missing in Source)"] ?? 0);
+
+  const hasAny = upgrades + downgrades + missing > 0;
+  if (!hasAny) {
+    return (
+      <span className="text-xs text-muted-foreground flex items-center gap-1">
+        <CheckCircle className="h-3 w-3 text-blue-500" />
+        All OK
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      {upgrades > 0 && (
+        <span className="flex items-center gap-0.5 text-green-700 font-medium">
+          <TrendingUp className="h-3 w-3" />
+          {upgrades}
+        </span>
+      )}
+      {downgrades > 0 && (
+        <span className="flex items-center gap-0.5 text-red-700 font-medium">
+          <TrendingDown className="h-3 w-3" />
+          {downgrades}
+        </span>
+      )}
+      {missing > 0 && (
+        <span className="flex items-center gap-0.5 text-yellow-700 font-medium">
+          <AlertCircle className="h-3 w-3" />
+          {missing}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Drift summary cards ──────────────────────────────────────────────────────
+
+function DriftSummaryCards({ summary }: { summary?: DriftSummaryCounts }) {
+  const cards = [
+    {
+      label: "Total Drifts",
+      value: summary?.total ?? 0,
+      className: "text-foreground",
+      bg: "",
+    },
+    {
+      label: "Upgrades",
+      value: summary?.upgrades ?? 0,
+      className: "text-green-600",
+      bg: "border-green-200 bg-green-50/40 dark:bg-green-950/20",
+    },
+    {
+      label: "Downgrades",
+      value: summary?.downgrades ?? 0,
+      className: "text-red-600",
+      bg: "border-red-200 bg-red-50/40 dark:bg-red-950/20",
+    },
+    {
+      label: "Missing",
+      value: summary?.missing ?? 0,
+      className: "text-yellow-600",
+      bg: "border-yellow-200 bg-yellow-50/40 dark:bg-yellow-950/20",
+    },
+  ];
+
+  return (
+    <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+      {cards.map((c) => (
+        <Card key={c.label} className={c.bg}>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs text-muted-foreground font-medium">{c.label}</p>
+            <p className={cn("text-2xl font-bold mt-0.5", c.className)}>{c.value}</p>
           </CardContent>
         </Card>
-      </div>
-    );
-  }
+      ))}
+    </div>
+  );
+}
 
-  if (!report) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold">Comparison Report</h2>
-          <p className="text-muted-foreground">No data available</p>
+// ─── Tab 1: Version Drift ─────────────────────────────────────────────────────
+
+function VersionDriftTab({
+  isGenerating,
+  neverGenerated,
+}: {
+  isGenerating: boolean;
+  neverGenerated: boolean;
+}) {
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 15 });
+  const [search, setSearch] = useState("");
+  const [actionFilters, setActionFilters] = useState<string[]>([]);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+
+  const { data: filterOptions } = useDriftFilterOptions();
+  const sortBy = sorting[0]?.id ?? "technical_name";
+
+  const queryParams = useMemo(
+    () => ({
+      page: pagination.pageIndex + 1,
+      limit: pagination.pageSize,
+      search: search || undefined,
+      action_filter: joinFilter(actionFilters) || undefined,
+      sort_by: sortBy,
+    }),
+    [pagination, search, actionFilters, sortBy]
+  );
+
+  const { data: driftData, isLoading, isFetching } = usePaginatedDrift(queryParams);
+
+  const columns = useMemo<ColumnDef<VersionDriftEntry>[]>(
+    () => [
+      {
+        accessorKey: "technical_name",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Module" />,
+        cell: ({ row }) => (
+          <div className="min-w-[140px]">
+            <p className="font-medium text-sm truncate max-w-[180px]" title={row.original.technical_name}>
+              {row.original.technical_name}
+            </p>
+            {row.original.module_name && (
+              <p className="text-[11px] text-muted-foreground truncate max-w-[180px]">
+                {row.original.module_name}
+              </p>
+            )}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "source_env",
+        header: () => <span className="text-xs font-medium">Source Env</span>,
+        cell: ({ row }) => (
+          <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
+            {row.original.source_env}
+          </Badge>
+        ),
+        enableSorting: false,
+      },
+      {
+        id: "source_version",
+        header: () => <span className="text-xs font-medium">Source Ver</span>,
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">
+            {row.original.source_version ?? (
+              <span className="text-muted-foreground italic text-xs">N/A</span>
+            )}
+          </span>
+        ),
+        enableSorting: false,
+      },
+      {
+        accessorKey: "dest_env",
+        header: () => <span className="text-xs font-medium">Dest Env</span>,
+        cell: ({ row }) => (
+          <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
+            {row.original.dest_env}
+          </Badge>
+        ),
+        enableSorting: false,
+      },
+      {
+        id: "dest_version",
+        header: () => <span className="text-xs font-medium">Dest Ver</span>,
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">
+            {row.original.dest_version ?? (
+              <span className="text-muted-foreground italic text-xs">N/A</span>
+            )}
+          </span>
+        ),
+        enableSorting: false,
+      },
+      {
+        accessorKey: "action",
+        header: ({ column }) => (
+          <div className="text-center">
+            <DataTableColumnHeader column={column} title="Action" className="justify-center" />
+          </div>
+        ),
+        cell: ({ row }) => (
+          <div className="flex justify-center">
+            <ActionBadge action={row.original.action} missingEnv={row.original.missing_env} />
+          </div>
+        ),
+      },
+    ],
+    []
+  );
+
+  const handleExportCsv = () => {
+    reportsApi.exportDriftCsv({
+      search: search || undefined,
+      action_filter: joinFilter(actionFilters) || undefined,
+      sort_by: sortBy,
+    });
+    toast.success("CSV download started");
+  };
+
+  const handleExportXlsx = async () => {
+    setExportingXlsx(true);
+    try {
+      await reportsApi.exportDriftXlsx({
+        search: search || undefined,
+        action_filter: joinFilter(actionFilters) || undefined,
+        sort_by: sortBy,
+      });
+      toast.success("Exported successfully");
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setExportingXlsx(false);
+    }
+  };
+
+  const filterBar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <SearchableMultiSelect
+        options={filterOptions?.action_options ?? []}
+        selected={actionFilters}
+        onChange={(v) => {
+          setActionFilters(v);
+          setPagination((p) => ({ ...p, pageIndex: 0 }));
+        }}
+        allLabel="Action"
+        searchPlaceholder="Filter by action..."
+        triggerWidth="w-[220px]"
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5"
+        onClick={handleExportCsv}
+        disabled={!driftData?.pagination.total_records}
+      >
+        <Download className="h-3.5 w-3.5" />
+        CSV
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5"
+        onClick={handleExportXlsx}
+        disabled={exportingXlsx || !driftData?.pagination.total_records}
+      >
+        {exportingXlsx ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Download className="h-3.5 w-3.5" />
+        )}
+        Excel
+      </Button>
+    </div>
+  );
+
+  const emptyState = (
+    <tr>
+      <td colSpan={columns.length} className="h-48 text-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <FileBarChart className="h-10 w-10 opacity-30" />
+          {neverGenerated ? (
+            <>
+              <p className="font-medium">No report generated yet.</p>
+              <p className="text-sm">Click &ldquo;Generate New Report&rdquo; to begin.</p>
+            </>
+          ) : (
+            <p className="text-sm">No drift entries match your filters.</p>
+          )}
         </div>
-      </div>
-    );
-  }
+      </td>
+    </tr>
+  );
 
-  const rowsWithAction = report.rows.filter((row) => row.action !== null && row.action !== undefined);
-  const displayedRows = showAll ? report.rows : rowsWithAction;
+  return (
+    <div className="space-y-4">
+      <DriftSummaryCards summary={driftData?.summary} />
+
+      <DataTable<VersionDriftEntry, unknown>
+        columns={columns}
+        data={driftData?.data ?? []}
+        loading={isLoading || (isGenerating && !driftData)}
+        pagination={driftData?.pagination}
+        pageIndex={pagination.pageIndex}
+        pageSize={pagination.pageSize}
+        pageCount={driftData?.pagination.total_pages ?? -1}
+        onPaginationChange={setPagination}
+        searchable
+        searchPlaceholder="Search module name or technical name..."
+        searchValue={search}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPagination((p) => ({ ...p, pageIndex: 0 }));
+        }}
+        onSortingChange={(s) => {
+          setSorting(s);
+          setPagination((p) => ({ ...p, pageIndex: 0 }));
+        }}
+        filterBar={filterBar}
+        emptyState={emptyState}
+      />
+
+      {isFetching && !isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Refreshing...
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab 2: Comparison Summary ────────────────────────────────────────────────
+
+function ComparisonSummaryTab({
+  isGenerating,
+  neverGenerated,
+}: {
+  isGenerating: boolean;
+  neverGenerated: boolean;
+}) {
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 15 });
+  const [search, setSearch] = useState("");
+  const [technicalNameFilters, setTechnicalNameFilters] = useState<string[]>([]);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+
+  const { data: filterOptions } = useComparisonFilterOptions();
+  const sortBy = sorting[0]?.id ?? "technical_name";
+
+  const queryParams = useMemo(
+    () => ({
+      page: pagination.pageIndex + 1,
+      limit: pagination.pageSize,
+      search: search || undefined,
+      technical_names: joinFilter(technicalNameFilters) || undefined,
+      sort_by: sortBy,
+    }),
+    [pagination, search, technicalNameFilters, sortBy]
+  );
+
+  const { data: reportData, isLoading, isFetching } = usePaginatedReport(queryParams);
+
+  const envKeys = useMemo(() => {
+    const firstRow = reportData?.data?.[0];
+    if (!firstRow?.version_data) return [];
+    return Object.keys(firstRow.version_data);
+  }, [reportData]);
+
+  const columns = useMemo<ColumnDef<ReportRowResponse>[]>(
+    () => [
+      {
+        accessorKey: "technical_name",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Technical Name" />,
+        cell: ({ row }) => (
+          <div className="min-w-[140px]">
+            <p className="font-medium text-sm truncate max-w-[180px]" title={row.original.technical_name}>
+              {row.original.technical_name}
+            </p>
+            {row.original.module_name && (
+              <p className="text-[11px] text-muted-foreground truncate max-w-[180px]">
+                {row.original.module_name}
+              </p>
+            )}
+          </div>
+        ),
+      },
+      ...envKeys.map<ColumnDef<ReportRowResponse>>((envKey) => ({
+        id: `env_${envKey}`,
+        header: () => (
+          <div className="text-center min-w-[100px]">
+            <p className="font-medium text-xs">{envKey}</p>
+          </div>
+        ),
+        cell: ({ row }) => (
+          <div className="flex justify-center">
+            <VersionCell data={row.original.version_data?.[envKey]} />
+          </div>
+        ),
+        enableSorting: false,
+      })),
+      {
+        id: "action_summary",
+        header: () => (
+          <div className="text-center min-w-[110px]">
+            <span className="text-xs font-medium">Action Summary</span>
+          </div>
+        ),
+        cell: ({ row }) => (
+          <div className="flex justify-center">
+            <ActionCountsSummary counts={row.original.action_counts} />
+          </div>
+        ),
+        enableSorting: false,
+      },
+    ],
+    [envKeys]
+  );
+
+  const handleExportXlsx = async () => {
+    setExportingXlsx(true);
+    try {
+      await reportsApi.exportComparisonXlsx({
+        search: search || undefined,
+        technical_names: joinFilter(technicalNameFilters) || undefined,
+        sort_by: sortBy,
+      });
+      toast.success("Exported successfully");
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setExportingXlsx(false);
+    }
+  };
+
+  const filterBar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <SearchableMultiSelect
+        options={filterOptions?.technical_name_options ?? []}
+        selected={technicalNameFilters}
+        onChange={(v) => {
+          setTechnicalNameFilters(v);
+          setPagination((p) => ({ ...p, pageIndex: 0 }));
+        }}
+        allLabel="Module"
+        searchPlaceholder="Search modules..."
+        triggerWidth="w-[200px]"
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5"
+        onClick={() => reportsApi.exportComparisonCsv()}
+        disabled={!reportData?.pagination.total_records}
+      >
+        <Download className="h-3.5 w-3.5" />
+        CSV
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5"
+        onClick={handleExportXlsx}
+        disabled={exportingXlsx || !reportData?.pagination.total_records}
+      >
+        {exportingXlsx ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Download className="h-3.5 w-3.5" />
+        )}
+        Excel
+      </Button>
+    </div>
+  );
+
+  const emptyState = (
+    <tr>
+      <td colSpan={columns.length} className="h-48 text-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <FileBarChart className="h-10 w-10 opacity-30" />
+          {neverGenerated ? (
+            <>
+              <p className="font-medium">No report generated yet.</p>
+              <p className="text-sm">Click &ldquo;Generate New Report&rdquo; to begin.</p>
+            </>
+          ) : (
+            <p className="text-sm">No modules match your filters.</p>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+
+  return (
+    <div className="space-y-4">
+      <DataTable<ReportRowResponse, unknown>
+        columns={columns}
+        data={reportData?.data ?? []}
+        loading={isLoading || (isGenerating && !reportData)}
+        pagination={reportData?.pagination}
+        pageIndex={pagination.pageIndex}
+        pageSize={pagination.pageSize}
+        pageCount={reportData?.pagination.total_pages ?? -1}
+        onPaginationChange={setPagination}
+        searchable
+        searchPlaceholder="Search module name or technical name..."
+        searchValue={search}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPagination((p) => ({ ...p, pageIndex: 0 }));
+        }}
+        onSortingChange={(s) => {
+          setSorting(s);
+          setPagination((p) => ({ ...p, pageIndex: 0 }));
+        }}
+        filterBar={filterBar}
+        emptyState={emptyState}
+      />
+
+      {isFetching && !isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Refreshing...
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export function ComparisonPage() {
+  const { data: metadata, isLoading: metaLoading } = useReportMetadata();
+  const generateReport = useGenerateReport();
+  const syncAll = useTriggerSyncAll();
+
+  const isGenerating = metadata?.is_generating || generateReport.isPending;
+  const neverGenerated = !metaLoading && !metadata?.last_generated_at && !metadata?.is_generating;
+
+  const handleGenerate = async () => {
+    try {
+      const result = await generateReport.mutateAsync();
+      toast.success(
+        `Report generated — ${result.rows_generated} modules, ${result.drift_entries_generated} drift entries.`
+      );
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        "Generation failed";
+      toast.error(message);
+    }
+  };
+
+  const handleSyncAll = async () => {
+    try {
+      await syncAll.mutateAsync();
+      toast.warning(
+        "Environments synced. Please regenerate the comparison report to see latest data.",
+        { duration: 6000 }
+      );
+    } catch {
+      toast.error("Sync All failed");
+    }
+  };
+
+  const lastGeneratedLabel = metaLoading ? (
+    <Skeleton className="h-4 w-40" />
+  ) : metadata?.last_generated_at ? (
+    <span className="text-sm text-muted-foreground">
+      Last generated:{" "}
+      <span className="font-medium text-foreground">
+        {new Date(
+          metadata.last_generated_at.endsWith("Z") || metadata.last_generated_at.includes("+")
+            ? metadata.last_generated_at
+            : metadata.last_generated_at + "Z"
+        ).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+      </span>
+    </span>
+  ) : (
+    <span className="text-sm text-muted-foreground italic">Never generated</span>
+  );
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+      {/* ── Page header ──────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="space-y-1">
           <h2 className="text-xl md:text-2xl font-bold">Comparison Report</h2>
-          <p className="text-muted-foreground text-sm md:text-base">
-            {report.summary.total_modules} modules across {report.summary.environments} environments
-            {rowsWithAction.length > 0 && (
-              <span className="ml-2 text-yellow-600 font-medium">
-                ({rowsWithAction.length} need attention)
-              </span>
-            )}
-          </p>
+          <div className="flex items-center gap-2">{lastGeneratedLabel}</div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isRefetching}
-        >
-          <RefreshCw className={cn("h-4 w-4 mr-2", isRefetching && "animate-spin")} />
-          Refresh
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={isGenerating}
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Generate New Report
+              </>
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncAll}
+            disabled={syncAll.isPending}
+          >
+            {syncAll.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Sync All Environments
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
-      {rowsWithAction.length > 0 && !showAll && (
-        <div className="flex items-center gap-3 p-3 md:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0" />
-          <span className="text-sm text-yellow-800">
-            Showing {rowsWithAction.length} modules with version differences.{" "}
-            <button
-              onClick={() => setShowAll(true)}
-              className="underline hover:no-underline font-medium"
-            >
-              Show all {report.summary.total_modules} modules
-            </button>
-          </span>
-        </div>
-      )}
+      {/* ── Tabs ─────────────────────────────────────────────────────── */}
+      <Tabs defaultValue="version-drift">
+        <TabsList>
+          <TabsTrigger value="version-drift">Version Drift</TabsTrigger>
+          <TabsTrigger value="comparison-summary">Comparison Summary</TabsTrigger>
+        </TabsList>
 
-      {showAll && rowsWithAction.length > 0 && (
-        <div className="flex items-center gap-3 p-3 md:p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <button
-            onClick={() => setShowAll(false)}
-            className="text-sm text-blue-800 underline hover:no-underline font-medium"
-          >
-            Show only modules with differences ({rowsWithAction.length})
-          </button>
-        </div>
-      )}
+        <TabsContent value="version-drift" className="mt-4">
+          <VersionDriftTab
+            isGenerating={isGenerating}
+            neverGenerated={neverGenerated}
+          />
+        </TabsContent>
 
-      <Card className="overflow-hidden">
-        <CardHeader className="pb-0">
-          <CardTitle className="text-lg">Version Matrix</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto max-h-[500px] md:max-h-[600px] overflow-y-auto">
-            <table className="w-full min-w-[800px]">
-              <thead className="sticky top-0 z-20 shadow-sm">
-                <tr className="border-b bg-muted/95 backdrop-blur">
-                  <th className="sticky left-0 z-30 px-3 py-3 text-left text-xs font-medium bg-muted/95 backdrop-blur min-w-[150px]">
-                    Module
-                  </th>
-                  {report.environments.map((env, idx) => (
-                    <th
-                      key={env}
-                      className={cn(
-                        "px-3 py-3 text-center text-xs font-medium min-w-[120px]",
-                        idx === 0 && "bg-blue-50/80"
-                      )}
-                    >
-                      <div className="font-medium truncate">{env}</div>
-                      <div className="text-[10px] font-normal text-muted-foreground font-normal">
-                        Order: {report.environment_orders?.[env] || "-"}
-                      </div>
-                    </th>
-                  ))}
-                  <th className="px-3 py-3 text-center text-xs font-medium min-w-[100px] bg-yellow-50/80">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayedRows.map((row) => (
-                  <tr
-                    key={row.technical_name}
-                    className={cn(
-                      "border-b last:border-0 hover:bg-muted/30 transition-colors",
-                      row.action && "bg-yellow-50/30"
-                    )}
-                  >
-                    <td className="sticky left-0 z-10 px-3 py-2 bg-background min-w-[150px]">
-                      <div className="truncate max-w-[150px]" title={row.technical_name}>
-                        <span className="font-medium text-sm">{row.technical_name}</span>
-                        {row.module_name && (
-                          <div className="text-[10px] text-muted-foreground truncate">
-                            {row.module_name}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    {report.environments.map((env, idx) => {
-                      const version = row.versions[env];
-                      const isMissing = version?.version_string === "N/A";
-                      return (
-                        <td
-                          key={env}
-                          className={cn(
-                            "px-3 py-2 text-center",
-                            idx === 0 && "bg-blue-50/20"
-                          )}
-                        >
-                          <div className="flex flex-col items-center gap-0.5">
-                            <Badge
-                              variant={isMissing ? "outline" : "secondary"}
-                              className={cn(
-                                "text-xs px-1.5 py-0",
-                                isMissing && "text-muted-foreground border-dashed"
-                              )}
-                            >
-                              {version?.version_string || "N/A"}
-                            </Badge>
-                            {version?.last_sync && (
-                              <span className="text-[10px] text-muted-foreground">
-                                {new Date(version.last_sync).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                    <td className="px-3 py-2 text-center bg-yellow-50/20">
-                      <ActionBadge action={row.action} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+        <TabsContent value="comparison-summary" className="mt-4">
+          <ComparisonSummaryTab
+            isGenerating={isGenerating}
+            neverGenerated={neverGenerated}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

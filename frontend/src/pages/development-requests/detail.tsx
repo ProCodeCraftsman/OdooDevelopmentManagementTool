@@ -1,47 +1,69 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ChangeEvent } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Edit, RotateCcw, Archive, Trash, Plus } from "lucide-react";
+import {
+  Edit, RotateCcw, Archive, Trash, Plus, Pencil, X, Check, Search, ChevronDown, ChevronRight,
+} from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   useDevelopmentRequest,
+  useControlParameters,
+  useUpdateDevelopmentRequest,
   useReopenDevelopmentRequest,
   useArchiveDevelopmentRequest,
   useRestoreDevelopmentRequest,
+  useUpdateModuleLine,
+  useDeleteModuleLine,
+  useAddRelatedRequest,
+  useRemoveRelatedRequest,
+  useSearchRequests,
 } from "@/hooks/useDevelopmentRequests";
+import { useLinkedPlansForDr } from "@/hooks/useReleasePlans";
+import type { LinkedReleasePlanEntry } from "@/api/release-plans";
+import { useAssignableUsers } from "@/hooks/useUsers";
 import { AddModuleLineDialog } from "@/components/development-requests/add-module-line-dialog";
+import { CommentsTab } from "@/components/development-requests/comments-tab";
+import { AttachmentsTab } from "@/components/development-requests/attachments-tab";
+import { AuditLogTab } from "@/components/development-requests/audit-log-tab";
+import { useAuthStore } from "@/store/auth-store";
+import type { RequestModuleLine, DevelopmentRequestUpdate } from "@/api/development-requests";
 import { toast } from "sonner";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function getStateColor(category: string): string {
   switch (category?.toLowerCase()) {
-    case "open":
-      return "bg-blue-100 text-blue-800";
-    case "in_progress":
-      return "bg-yellow-100 text-yellow-800";
-    case "closed":
-      return "bg-green-100 text-green-800";
-    default:
-      return "bg-gray-100 text-gray-800";
+    case "open": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+    case "in progress": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+    case "closed": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    default: return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
   }
 }
 
@@ -52,19 +74,194 @@ function getPriorityColor(level: number): string {
   return "bg-gray-100 text-gray-800";
 }
 
+// ---------------------------------------------------------------------------
+// Async parent-request combobox
+// ---------------------------------------------------------------------------
+
+interface ParentSearchProps {
+  value: number | undefined;
+  onChange: (id: number | undefined) => void;
+  excludeId: number;
+  disabled?: boolean;
+}
+
+function ParentRequestSearch({ value, onChange, excludeId, disabled }: ParentSearchProps) {
+  const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { data: results = [], isFetching } = useSearchRequests(debouncedQuery, excludeId);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setDebouncedQuery(inputValue), 300);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [inputValue]);
+
+  const selectedLabel = value ? `#${value}` : "None";
+
+  const handleSelect = (id: number, label: string) => {
+    onChange(id);
+    setInputValue(label);
+    setOpen(false);
+  };
+
+  const handleClear = () => {
+    onChange(undefined);
+    setInputValue("");
+    setDebouncedQuery("");
+  };
+
+  return (
+    <Popover open={open && !disabled} onOpenChange={(o) => !disabled && setOpen(o)}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          disabled={disabled}
+          className="w-full justify-between font-normal"
+          onClick={() => !disabled && setOpen((o) => !o)}
+        >
+          <span className="truncate">{value ? selectedLabel : "Search parent request..."}</span>
+          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="start">
+        <div className="p-2 border-b">
+          <Input
+            placeholder="Type request number or title…"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            autoFocus
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="max-h-60 overflow-y-auto">
+          {value && (
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent flex items-center gap-2"
+              onClick={handleClear}
+            >
+              <X className="h-3.5 w-3.5" /> Clear parent
+            </button>
+          )}
+          {isFetching && (
+            <p className="px-3 py-2 text-sm text-muted-foreground">Searching…</p>
+          )}
+          {!isFetching && debouncedQuery.length > 0 && results.length === 0 && (
+            <p className="px-3 py-2 text-sm text-muted-foreground">No results found.</p>
+          )}
+          {results.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className="w-full px-3 py-2 text-left hover:bg-accent flex flex-col gap-0.5"
+              onClick={() => handleSelect(r.id, r.request_number)}
+            >
+              <span className="text-sm font-medium">{r.request_number}</span>
+              <span className="text-xs text-muted-foreground truncate">{r.title}</span>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit-line state
+// ---------------------------------------------------------------------------
+
+interface EditLineState {
+  line: RequestModuleLine;
+  version: string;
+  md5_sum: string;
+  email_thread_zip: string;
+  uat_status: string;
+  uat_ticket: string;
+}
+
+// ---------------------------------------------------------------------------
+// Form schema for inline editing
+// ---------------------------------------------------------------------------
+
+const editSchema = z.object({
+  title: z.string().min(1, "Title is required").max(255),
+  request_type_id: z.number().min(1),
+  functional_category_id: z.number().min(1),
+  priority_id: z.number().min(1),
+  assigned_developer_id: z.number().optional(),
+  request_state_id: z.number().optional(),
+  parent_request_id: z.number().optional(),
+  description: z.string().min(1, "Description is required"),
+  additional_info: z.string().optional(),
+});
+
+type EditFormData = z.infer<typeof editSchema>;
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function DevelopmentRequestsDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const requestId = parseInt(id || "0");
+  const { user } = useAuthStore();
 
   const { data: request, isLoading, error } = useDevelopmentRequest(requestId);
+  const { data: controlParams } = useControlParameters();
+  const { data: assignableUsers } = useAssignableUsers();
+
+  const updateMutation = useUpdateDevelopmentRequest();
   const reopenMutation = useReopenDevelopmentRequest();
   const archiveMutation = useArchiveDevelopmentRequest();
   const restoreMutation = useRestoreDevelopmentRequest();
+  const updateLineMutation = useUpdateModuleLine();
+  const deleteLineMutation = useDeleteModuleLine();
+  const addRelated = useAddRelatedRequest();
+  const removeRelated = useRemoveRelatedRequest();
+
+  const [isEditing, setIsEditing] = useState(false);
   const [showReopenDialog, setShowReopenDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [reopenComment, setReopenComment] = useState("");
   const [showAddModuleDialog, setShowAddModuleDialog] = useState(false);
+  const [editLine, setEditLine] = useState<EditLineState | null>(null);
+  const [relatedInput, setRelatedInput] = useState("");
+  const [datesOpen, setDatesOpen] = useState(false);
+  const [traceabilityOpen, setTraceabilityOpen] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<EditFormData>({
+    resolver: zodResolver(editSchema),
+  });
+
+  // Populate form whenever the request loads or edit mode is toggled on
+  useEffect(() => {
+    if (request) {
+      reset({
+        title: request.title,
+        request_type_id: request.request_type_id,
+        functional_category_id: request.functional_category_id,
+        priority_id: request.priority_id,
+        assigned_developer_id: request.assigned_developer_id ?? undefined,
+        request_state_id: request.request_state_id,
+        parent_request_id: request.parent_request_id ?? undefined,
+        description: request.description,
+        additional_info: request.additional_info ?? "",
+      });
+    }
+  }, [request, reset]);
 
   if (isLoading) {
     return (
@@ -79,241 +276,743 @@ export function DevelopmentRequestsDetailPage() {
     return (
       <div className="space-y-6">
         <Button variant="ghost" asChild>
-          <Link to="/development-requests">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to List
-          </Link>
+          <Link to="/development-requests">Back to List</Link>
         </Button>
         <Card>
           <CardContent className="p-12 text-center">
-            <p className="text-red-500">Error loading request: {(error as Error)?.message}</p>
+            <p className="text-destructive">
+              Error loading request: {(error as Error)?.message}
+            </p>
           </CardContent>
         </Card>
       </div>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Permissions
+  // ---------------------------------------------------------------------------
   const canEdit = request.permissions?.can_update;
+  const canManageLines = request.permissions?.can_add_module_lines;
   const canReopen = request.permissions?.can_reopen;
+  const canEditState = request.permissions?.can_edit_state ?? false;
+  const canEditType = request.permissions?.can_edit_request_type ?? false;
+  const canEditPriority = request.permissions?.can_edit_priority ?? false;
+  const canEditCategory = request.permissions?.can_edit_functional_category ?? false;
+  const canEditAssignee = request.permissions?.can_edit_assigned_developer ?? false;
+  const canEditDescription = request.permissions?.can_edit_description ?? false;
+  const isAdmin = request.permissions?.can_manage_system ?? false;
   const isClosed = request.request_state?.category?.toLowerCase() === "closed";
   const isArchived = request.is_archived;
+
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    reset({
+      title: request.title,
+      request_type_id: request.request_type_id,
+      functional_category_id: request.functional_category_id,
+      priority_id: request.priority_id,
+      assigned_developer_id: request.assigned_developer_id ?? undefined,
+      request_state_id: request.request_state_id,
+      parent_request_id: request.parent_request_id ?? undefined,
+      description: request.description,
+      additional_info: request.additional_info ?? "",
+    });
+  };
+
+  const onSave = async (data: EditFormData) => {
+    const payload: DevelopmentRequestUpdate = {
+      title: data.title,
+      request_type_id: data.request_type_id,
+      functional_category_id: data.functional_category_id,
+      priority_id: data.priority_id,
+      description: data.description,
+      additional_info: data.additional_info || undefined,
+      assigned_developer_id: data.assigned_developer_id,
+      request_state_id: data.request_state_id,
+      parent_request_id: data.parent_request_id,
+    };
+    try {
+      await updateMutation.mutateAsync({ id: requestId, data: payload });
+      setIsEditing(false);
+    } catch {
+      // error toasted by mutation
+    }
+  };
 
   const handleReopen = async () => {
     if (!reopenComment.trim()) {
       toast.error("Please provide a comment explaining why you're reopening this request");
       return;
     }
-
     try {
       await reopenMutation.mutateAsync({ id: requestId, comment: reopenComment });
       setShowReopenDialog(false);
       setReopenComment("");
-    } catch {
-      // Error is handled by the mutation's onError callback
-    }
+    } catch { /* handled by mutation */ }
   };
 
   const handleArchive = async () => {
     try {
       await archiveMutation.mutateAsync(requestId);
       setShowArchiveDialog(false);
-    } catch {
-      // Error is handled by the mutation's onError callback
-    }
+    } catch { /* handled by mutation */ }
   };
 
-  const handleRestore = async () => {
-    try {
-      await restoreMutation.mutateAsync(requestId);
-    } catch {
-      // Error is handled by the mutation's onError callback
-    }
+  const handleEditLine = (line: RequestModuleLine) => {
+    setEditLine({
+      line,
+      version: line.module_version ?? "",
+      md5_sum: line.module_md5_sum ?? "",
+      email_thread_zip: line.email_thread_zip ?? "",
+      uat_status: line.uat_status ?? "",
+      uat_ticket: line.uat_ticket ?? "",
+    });
   };
+
+  const handleSaveEditLine = async () => {
+    if (!editLine) return;
+    try {
+      await updateLineMutation.mutateAsync({
+        requestId,
+        lineId: editLine.line.id,
+        data: {
+          module_version: editLine.version || undefined,
+          module_md5_sum: editLine.md5_sum || undefined,
+          email_thread_zip: editLine.email_thread_zip || undefined,
+          uat_status: editLine.uat_status || undefined,
+          uat_ticket: editLine.uat_ticket || undefined,
+        },
+      });
+      setEditLine(null);
+    } catch { /* handled by mutation */ }
+  };
+
+  const handleAddRelated = async () => {
+    const relatedId = parseInt(relatedInput.trim());
+    if (!relatedId || isNaN(relatedId)) {
+      toast.error("Enter a valid request ID");
+      return;
+    }
+    try {
+      await addRelated.mutateAsync({ requestId, relatedId });
+      setRelatedInput("");
+    } catch { /* handled by mutation */ }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Render helpers
+  // ---------------------------------------------------------------------------
+
+  const renderViewField = (label: string, value: React.ReactNode) => (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+        {label}
+      </p>
+      <div className="text-sm font-medium">{value ?? <span className="text-muted-foreground">—</span>}</div>
+    </div>
+  );
+
+  // ---------------------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------------------
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" asChild>
-            <Link to="/development-requests">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Link>
-          </Button>
-          <h1 className="text-3xl font-bold">{request.request_number}</h1>
-          <Badge className={getStateColor(request.request_state?.category || "")}>
-            {request.request_state?.name || "Unknown"}
-          </Badge>
+      {/* ── Page header ── */}
+      <div className="space-y-3">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link to="/development-requests" className="hover:text-foreground transition-colors">
+            Development Requests
+          </Link>
+          <span>/</span>
+          <span className="text-foreground font-medium">{request.request_number}</span>
         </div>
-        <div className="flex gap-2">
-          {isClosed && canReopen && !isArchived && (
-            <Button variant="outline" onClick={() => setShowReopenDialog(true)}>
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Reopen
-            </Button>
-          )}
-          {canEdit && !isArchived && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => setShowArchiveDialog(true)}
-                className="text-destructive hover:text-destructive"
-              >
-                <Archive className="mr-2 h-4 w-4" />
-                Archive
-              </Button>
-              <Button onClick={() => navigate(`/development-requests/${request.id}/edit`)}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-            </>
-          )}
-          {isArchived && canEdit && (
-            <Button
-              variant="outline"
-              onClick={handleRestore}
-              disabled={restoreMutation.isPending}
-            >
-              <RotateCcw className="mr-2 h-4 w-4" />
-              {restoreMutation.isPending ? "Restoring..." : "Restore"}
-            </Button>
-          )}
-        </div>
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Request Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-muted-foreground">Type</Label>
-                <p className="font-medium">{request.request_type?.name || "Unknown"}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Priority</Label>
-                <Badge className={getPriorityColor(request.priority?.level || 1)}>
-                  {request.priority?.name || "Unknown"}
+        {/* Title + State Badge + Actions */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            {!isEditing ? (
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-2xl font-bold leading-tight">{request.title}</h1>
+                <Badge className={getStateColor(request.request_state?.category || "")}>
+                  {request.request_state?.name || "Unknown"}
                 </Badge>
+                {isArchived && <Badge variant="secondary">Archived</Badge>}
               </div>
-              <div>
-                <Label className="text-muted-foreground">Category</Label>
-                <p className="font-medium">{request.functional_category?.name || "Unknown"}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Assignee</Label>
-                <p className="font-medium">
-                  {request.assigned_developer?.username || "Unassigned"}
-                </p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Request Date</Label>
-                <p className="font-medium">
-                  {request.request_date
-                    ? new Date(request.request_date).toLocaleDateString()
-                    : "-"}
-                </p>
-              </div>
-              {request.request_close_date && (
-                <div>
-                  <Label className="text-muted-foreground">Close Date</Label>
-                  <p className="font-medium">
-                    {new Date(request.request_close_date).toLocaleDateString()}
-                  </p>
+            ) : (
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex flex-col gap-1">
+                  <Input
+                    className="text-xl font-bold h-10 max-w-[520px]"
+                    placeholder="Title"
+                    {...register("title")}
+                  />
+                  {errors.title && (
+                    <span className="text-xs text-destructive">{errors.title.message}</span>
+                  )}
                 </div>
-              )}
-              <div>
-                <Label className="text-muted-foreground">Iteration</Label>
-                <p className="font-medium">#{request.iteration_counter}</p>
-              </div>
-              {request.uat_request_id && (
-                <div>
-                  <Label className="text-muted-foreground">UAT Request ID</Label>
-                  <p className="font-medium">{request.uat_request_id}</p>
-                </div>
-              )}
-            </div>
-            <div>
-              <Label className="text-muted-foreground">Description</Label>
-              <p className="mt-1 whitespace-pre-wrap">{request.description}</p>
-            </div>
-            {request.comments && (
-              <div>
-                <Label className="text-muted-foreground">Comments</Label>
-                <p className="mt-1 whitespace-pre-wrap">{request.comments}</p>
+                <Badge className={getStateColor(request.request_state?.category || "")}>
+                  {request.request_state?.name || "Unknown"}
+                </Badge>
+                {isArchived && <Badge variant="secondary">Archived</Badge>}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
 
-        <div className="space-y-6">
-          {request.parent_request_id && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Parent Request</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  variant="link"
-                  className="p-0 h-auto"
-                  onClick={() => navigate(`/development-requests/${request.parent_request_id}`)}
-                >
-                  View Parent Request #{request.parent_request_id}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Module Lines ({request.module_lines?.length || 0})</CardTitle>
-              {canEdit && (
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {!isEditing && isClosed && canReopen && !isArchived && (
+              <Button variant="outline" size="sm" onClick={() => setShowReopenDialog(true)}>
+                <RotateCcw className="mr-2 h-4 w-4" />Reopen
+              </Button>
+            )}
+            {!isEditing && isArchived && canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => restoreMutation.mutate(requestId)}
+                disabled={restoreMutation.isPending}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                {restoreMutation.isPending ? "Restoring…" : "Restore"}
+              </Button>
+            )}
+            {!isEditing && canEdit && !isArchived && (
+              <>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowAddModuleDialog(true)}
+                  onClick={() => setShowArchiveDialog(true)}
+                  className="text-destructive hover:text-destructive"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Module
+                  <Archive className="mr-2 h-4 w-4" />Archive
                 </Button>
-              )}
+                <Button size="sm" onClick={() => setIsEditing(true)}>
+                  <Edit className="mr-2 h-4 w-4" />Edit
+                </Button>
+              </>
+            )}
+            {isEditing && (
+              <>
+                <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={isSubmitting}>
+                  <X className="mr-2 h-4 w-4" />Cancel
+                </Button>
+                <Button size="sm" onClick={handleSubmit(onSave)} disabled={isSubmitting}>
+                  <Check className="mr-2 h-4 w-4" />
+                  {isSubmitting ? "Saving…" : "Save Changes"}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main content — Jira-style 3-col grid ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* ── Left column (col-span-2): Work Area ── */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Description */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Description</CardTitle>
             </CardHeader>
             <CardContent>
-              {!request.module_lines?.length ? (
-                <p className="text-muted-foreground">No modules added.</p>
+              {!isEditing ? (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {request.description}
+                </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Module</TableHead>
-                      <TableHead>Version</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {request.module_lines.map((line) => (
-                      <TableRow key={line.id}>
-                        <TableCell className="font-medium">
-                          {line.module_technical_name}
-                        </TableCell>
-                        <TableCell>{line.module_version || "-"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="space-y-1.5">
+                  <Textarea
+                    placeholder="Describe the request…"
+                    className="min-h-[180px] text-sm"
+                    disabled={!canEditDescription}
+                    {...register("description")}
+                  />
+                  {errors.description && (
+                    <p className="text-xs text-destructive">{errors.description.message}</p>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
 
+          {/* Additional Info */}
           <Card>
             <CardHeader>
-              <CardTitle>Release Plan ({request.release_plan_lines?.length || 0})</CardTitle>
+              <CardTitle className="text-base">Additional Info</CardTitle>
             </CardHeader>
             <CardContent>
-              {!request.release_plan_lines?.length ? (
-                <p className="text-muted-foreground">No release plan entries.</p>
+              {!isEditing ? (
+                request.additional_info ? (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {request.additional_info}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No additional info provided.</p>
+                )
               ) : (
+                <Textarea
+                  placeholder="Any additional context or notes (optional)…"
+                  className="min-h-[120px] text-sm"
+                  {...register("additional_info")}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Tabs: Modules, Comments, Attachments, History ── */}
+          <Tabs defaultValue="modules">
+            <TabsList>
+              <TabsTrigger value="modules">
+                Modules ({request.module_lines?.length ?? 0})
+              </TabsTrigger>
+              <TabsTrigger value="comments">
+                Comments ({request.comments_thread?.length ?? 0})
+              </TabsTrigger>
+              <TabsTrigger value="attachments">
+                Attachments ({request.attachments?.length ?? 0})
+              </TabsTrigger>
+              <TabsTrigger value="linked-plans">Release Plans</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
+            </TabsList>
+
+            {/* Modules Tab */}
+            <TabsContent value="modules" className="mt-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Module Lines ({request.module_lines?.length || 0})</CardTitle>
+                  {canManageLines && !isClosed && !isArchived && (
+                    <Button variant="outline" size="sm" onClick={() => setShowAddModuleDialog(true)}>
+                      <Plus className="mr-2 h-4 w-4" />Add Module
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="p-0">
+                  {!request.module_lines?.length ? (
+                    <div className="px-6 py-8 text-center text-muted-foreground text-sm">
+                      No modules added yet.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Module</TableHead>
+                            <TableHead>Version</TableHead>
+                            <TableHead>MD5 Sum</TableHead>
+                            <TableHead>UAT Status</TableHead>
+                            <TableHead>UAT Ticket</TableHead>
+                            <TableHead>Added</TableHead>
+                            {canManageLines && !isClosed && !isArchived && (
+                              <TableHead className="text-right">Actions</TableHead>
+                            )}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {request.module_lines.map((line) => (
+                            <TableRow key={line.id}>
+                              <TableCell className="font-medium">{line.module_technical_name}</TableCell>
+                              <TableCell>
+                                {line.module_version || <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell>
+                                {line.module_md5_sum ? (
+                                  <span className="font-mono text-xs" title={line.module_md5_sum}>
+                                    {line.module_md5_sum.slice(0, 12)}…
+                                  </span>
+                                ) : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell>
+                                {line.uat_status ? (
+                                  <Badge variant="outline" className="text-xs">{line.uat_status}</Badge>
+                                ) : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {line.uat_ticket || <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                {new Date(line.created_at).toLocaleDateString()}
+                              </TableCell>
+                              {canManageLines && !isClosed && !isArchived && (
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      variant="ghost" size="icon" className="h-7 w-7"
+                                      onClick={() => handleEditLine(line)}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost" size="icon" className="h-7 w-7"
+                                      onClick={() => handleDeleteLine(line.id)}
+                                      disabled={deleteLineMutation.isPending}
+                                    >
+                                      <Trash className="h-3.5 w-3.5 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Comments Tab */}
+            <TabsContent value="comments" className="mt-4">
+              <Card>
+                <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
+                <CardContent>
+                  <CommentsTab
+                    requestId={requestId}
+                    currentUserId={user?.id}
+                    isAdmin={isAdmin}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Attachments Tab */}
+            <TabsContent value="attachments" className="mt-4">
+              <Card>
+                <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
+                <CardContent>
+                  <AttachmentsTab
+                    requestId={requestId}
+                    currentUserId={user?.id}
+                    isAdmin={isAdmin}
+                    readonly={isArchived}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Linked Release Plans Tab */}
+            <TabsContent value="linked-plans" className="mt-4">
+              <LinkedReleasePlansTab requestId={requestId} />
+            </TabsContent>
+
+            {/* History Tab */}
+            <TabsContent value="history" className="mt-4">
+              <Card>
+                <CardHeader><CardTitle>Change History</CardTitle></CardHeader>
+                <CardContent>
+                  <AuditLogTab requestId={requestId} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* ── Right column (col-span-1): Meta Area — sticky ── */}
+        <div className="sticky top-6 space-y-4">
+          <Card>
+            <CardContent className="p-0 divide-y">
+              {/* Section 1: Details */}
+              <div className="p-4 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Details
+                </p>
+                {!isEditing ? (
+                  <>
+                    {renderViewField("Type", request.request_type?.name)}
+                    {renderViewField("Category", request.functional_category?.name)}
+                    {renderViewField(
+                      "Priority",
+                      <Badge className={getPriorityColor(request.priority?.level || 1)}>
+                        {request.priority?.name}
+                      </Badge>
+                    )}
+                    {renderViewField(
+                      "Assigned Developer",
+                      request.assigned_developer?.username || "Unassigned"
+                    )}
+                    {renderViewField(
+                      "State",
+                      <Badge className={getStateColor(request.request_state?.category || "")}>
+                        {request.request_state?.name}
+                      </Badge>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Request Type</Label>
+                      <Select
+                        value={watch("request_type_id")?.toString() || ""}
+                        onValueChange={(v) => setValue("request_type_id", parseInt(v))}
+                        disabled={!canEditType}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {controlParams?.request_types.map((t) => (
+                            <SelectItem key={t.id} value={t.id.toString()}>
+                              {t.name} ({t.category})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Functional Category</Label>
+                      <Select
+                        value={watch("functional_category_id")?.toString() || ""}
+                        onValueChange={(v) => setValue("functional_category_id", parseInt(v))}
+                        disabled={!canEditCategory}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {controlParams?.functional_categories.map((c) => (
+                            <SelectItem key={c.id} value={c.id.toString()}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Priority</Label>
+                      <Select
+                        value={watch("priority_id")?.toString() || ""}
+                        onValueChange={(v) => setValue("priority_id", parseInt(v))}
+                        disabled={!canEditPriority}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {controlParams?.priorities.map((p) => (
+                            <SelectItem key={p.id} value={p.id.toString()}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Assigned Developer</Label>
+                      <Select
+                        value={watch("assigned_developer_id")?.toString() || "none"}
+                        onValueChange={(v) =>
+                          setValue(
+                            "assigned_developer_id",
+                            v === "none" ? undefined : parseInt(v)
+                          )
+                        }
+                        disabled={!canEditAssignee}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Unassigned" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Unassigned</SelectItem>
+                          {assignableUsers?.map((u) => (
+                            <SelectItem key={u.id} value={u.id.toString()}>
+                              {u.username}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {canEditState && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">State</Label>
+                        <Select
+                          value={watch("request_state_id")?.toString() || ""}
+                          onValueChange={(v) =>
+                            setValue("request_state_id", v ? parseInt(v) : undefined)
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Select state" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {controlParams?.request_states.map((s) => (
+                              <SelectItem key={s.id} value={s.id.toString()}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Dates */}
+              <Collapsible.Root open={datesOpen} onOpenChange={setDatesOpen}>
+                <Collapsible.Trigger asChild>
+                  <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 rounded-t-md">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Dates
+                    </p>
+                    {datesOpen ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                </Collapsible.Trigger>
+                <Collapsible.Content className="p-4 space-y-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200">
+                {renderViewField("Iteration", `#${request.iteration_counter}`)}
+                {renderViewField(
+                  "Request Date",
+                  request.request_date
+                    ? new Date(request.request_date).toLocaleDateString()
+                    : null
+                )}
+                {request.request_close_date &&
+                  renderViewField(
+                    "Close Date",
+                    new Date(request.request_close_date).toLocaleDateString()
+                  )}
+                {request.created_by &&
+                  renderViewField("Created By", request.created_by.username)}
+                {request.updated_by &&
+                  renderViewField("Last Updated By", request.updated_by.username)}
+                </Collapsible.Content>
+              </Collapsible.Root>
+
+              {/* Section 3: Traceability */}
+              <Collapsible.Root open={traceabilityOpen} onOpenChange={setTraceabilityOpen}>
+                <Collapsible.Trigger asChild>
+                  <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 rounded-t-md">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Traceability
+                    </p>
+                    {traceabilityOpen ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                </Collapsible.Trigger>
+                <Collapsible.Content className="p-4 space-y-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200">
+
+                {/* Parent request */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Parent Request
+                  </p>
+                  {!isEditing ? (
+                    request.parent_request_id ? (
+                      <Button
+                        variant="link"
+                        className="p-0 h-auto text-sm"
+                        onClick={() => navigate(`/development-requests/${request.parent_request_id}`)}
+                      >
+                        View #{request.parent_request_id}
+                      </Button>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )
+                  ) : (
+                    <div className="space-y-1">
+                      <ParentRequestSearch
+                        value={watch("parent_request_id")}
+                        onChange={(id) => setValue("parent_request_id", id)}
+                        excludeId={requestId}
+                        disabled={isClosed}
+                      />
+                      {isClosed && (
+                        <p className="text-xs text-muted-foreground">
+                          Disabled — request is in a closed state.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Related requests */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Related Requests
+                  </p>
+                  {request.related_requests?.length ? (
+                    <div className="space-y-1 mb-2">
+                      {request.related_requests.map((rel) => (
+                        <div key={rel.id} className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <Button
+                              variant="link"
+                              className="p-0 h-auto text-sm"
+                              onClick={() => navigate(`/development-requests/${rel.id}`)}
+                            >
+                              {rel.request_number}
+                            </Button>
+                            <p className="text-xs text-muted-foreground truncate">{rel.title}</p>
+                          </div>
+                          {canEdit && !isArchived && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0"
+                              onClick={() => removeRelated.mutate({ requestId, relatedId: rel.id })}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mb-2">No related requests.</p>
+                  )}
+                  {canEdit && !isArchived && (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Request ID"
+                        value={relatedInput}
+                        onChange={(e) => setRelatedInput(e.target.value)}
+                        className="h-8 text-sm"
+                        onKeyDown={(e) => { if (e.key === "Enter") handleAddRelated(); }}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        onClick={handleAddRelated}
+                        disabled={addRelated.isPending}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                </Collapsible.Content>
+              </Collapsible.Root>
+            </CardContent>
+          </Card>
+
+          {/* Release Plan (view only) */}
+          {(request.release_plan_lines?.length ?? 0) > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Release Plan ({request.release_plan_lines?.length || 0})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -324,10 +1023,8 @@ export function DevelopmentRequestsDetailPage() {
                   <TableBody>
                     {request.release_plan_lines.map((line) => (
                       <TableRow key={line.id}>
-                        <TableCell>
-                          {line.release_plan_date
-                            ? new Date(line.release_plan_date).toLocaleDateString()
-                            : "-"}
+                        <TableCell className="text-sm">
+                          {new Date(line.release_plan_date).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{line.release_plan_status}</Badge>
@@ -336,75 +1033,136 @@ export function DevelopmentRequestsDetailPage() {
                     ))}
                   </TableBody>
                 </Table>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
-      <Dialog open={showReopenDialog} onOpenChange={setShowReopenDialog}>
-        <DialogContent>
+      {/* ── Edit Module Line Dialog ── */}
+      <Dialog open={!!editLine} onOpenChange={(open) => { if (!open) setEditLine(null); }}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reopen Request</DialogTitle>
+            <DialogTitle>Edit Module Line</DialogTitle>
+            <DialogDescription>{editLine?.line.module_technical_name}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="comment">Comment *</Label>
-              <Textarea
-                id="comment"
-                value={reopenComment}
-                onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setReopenComment(e.target.value)}
-                placeholder="Explain why you're reopening this request..."
-                className="mt-2"
-              />
+          {editLine && (
+            <div className="space-y-3 py-2">
+              <div className="space-y-1.5">
+                <Label>Version</Label>
+                <Input
+                  placeholder="e.g. 17.0.1.0.0"
+                  value={editLine.version}
+                  onChange={(e) => setEditLine({ ...editLine, version: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>MD5 Sum</Label>
+                <Input
+                  placeholder="32–64 char hex"
+                  value={editLine.md5_sum}
+                  maxLength={64}
+                  className="font-mono"
+                  onChange={(e) => setEditLine({ ...editLine, md5_sum: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email / Zip Path</Label>
+                <Input
+                  placeholder="/path/to/email.zip"
+                  value={editLine.email_thread_zip}
+                  maxLength={500}
+                  onChange={(e) => setEditLine({ ...editLine, email_thread_zip: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>UAT Status</Label>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                    value={editLine.uat_status}
+                    onChange={(e) => setEditLine({ ...editLine, uat_status: e.target.value })}
+                  >
+                    <option value="">—</option>
+                    <option>Open</option>
+                    <option>In Progress</option>
+                    <option>Closed</option>
+                    <option>Rejected</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>UAT Ticket</Label>
+                  <Input
+                    placeholder="UAT-XXXX"
+                    value={editLine.uat_ticket}
+                    onChange={(e) => setEditLine({ ...editLine, uat_ticket: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowReopenDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleReopen}
-              disabled={reopenMutation.isPending || !reopenComment.trim()}
-            >
-              {reopenMutation.isPending ? "Reopening..." : "Reopen Request"}
+            <Button variant="outline" onClick={() => setEditLine(null)}>Cancel</Button>
+            <Button onClick={handleSaveEditLine} disabled={updateLineMutation.isPending}>
+              {updateLineMutation.isPending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* ── Reopen Dialog ── */}
+      <Dialog open={showReopenDialog} onOpenChange={setShowReopenDialog}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reopen Request</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <Label htmlFor="reopen-comment">Comment *</Label>
+            <Textarea
+              id="reopen-comment"
+              value={reopenComment}
+              onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setReopenComment(e.target.value)}
+              placeholder="Explain why you're reopening this request…"
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReopenDialog(false)}>Cancel</Button>
+            <Button
+              onClick={handleReopen}
+              disabled={reopenMutation.isPending || !reopenComment.trim()}
+            >
+              {reopenMutation.isPending ? "Reopening…" : "Reopen Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Archive Dialog ── */}
       <Dialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Archive Request</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Archive Request</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
-            <p>
-              Are you sure you want to archive <strong>{request.request_number}</strong>?
-            </p>
-            <div className="rounded-md bg-yellow-50 border border-yellow-200 p-4">
+            <p>Are you sure you want to archive <strong>{request.request_number}</strong>?</p>
+            <div className="rounded-md bg-yellow-50 border border-yellow-200 p-4 dark:bg-yellow-900/10 dark:border-yellow-800">
               <div className="flex gap-3">
-                <Trash className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-yellow-800">
-                  <p className="font-medium">This action will cascade to child requests</p>
+                <Archive className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-yellow-800 dark:text-yellow-300">
+                  <p className="font-medium">Requires Cancelled/Rejected state</p>
                   <p className="mt-1">
-                    All child requests linked to this parent will also be archived.
-                    You can restore them individually from their detail pages.
+                    Request must be in a Cancelled or Rejected state and must not be
+                    linked to any active Release Plans. Child requests will also be archived.
                   </p>
                 </div>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowArchiveDialog(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setShowArchiveDialog(false)}>Cancel</Button>
             <Button
               variant="destructive"
               onClick={handleArchive}
               disabled={archiveMutation.isPending}
             >
-              {archiveMutation.isPending ? "Archiving..." : "Archive Request"}
+              {archiveMutation.isPending ? "Archiving…" : "Archive Request"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -416,5 +1174,78 @@ export function DevelopmentRequestsDetailPage() {
         request={request}
       />
     </div>
+  );
+
+  function handleDeleteLine(lineId: number) {
+    deleteLineMutation.mutate({ requestId, lineId });
+  }
+}
+
+// ─── Linked Release Plans Tab ─────────────────────────────────────────────────
+
+const PLAN_STATE_COLORS: Record<string, string> = {
+  Open: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  "In Progress": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+  Closed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  "Failed/Cancelled": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+};
+
+function LinkedReleasePlansTab({ requestId }: { requestId: number }) {
+  const { data: plans, isLoading } = useLinkedPlansForDr(requestId);
+
+  const formatDate = (iso: string | null | undefined) => {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Linked Release Plans</CardTitle></CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="p-4 space-y-2"><div className="h-8 bg-muted animate-pulse rounded" /><div className="h-8 bg-muted animate-pulse rounded" /></div>
+        ) : !plans?.length ? (
+          <div className="px-6 py-8 text-center text-muted-foreground text-sm">No release plans linked to this request.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Module</TableHead>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Release Plan</TableHead>
+                  <TableHead>Source → Target</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Planned Date</TableHead>
+                  <TableHead>Actual Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(plans as LinkedReleasePlanEntry[]).map((entry) => (
+                  <TableRow key={entry.release_plan_line_id}>
+                    <TableCell className="font-mono text-sm">{entry.module_technical_name ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-sm">{entry.module_version ?? "—"}</TableCell>
+                    <TableCell>
+                      <Link to={`/release-plans/${entry.plan_id}`}
+                        className="text-primary hover:underline font-mono text-sm font-medium">
+                        {entry.plan_number}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-sm">{entry.source_env_name} → {entry.target_env_name}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${PLAN_STATE_COLORS[entry.state_category] ?? "bg-gray-100 text-gray-800"}`}>
+                        {entry.state_name}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-sm">{formatDate(entry.planned_deployment_date)}</TableCell>
+                    <TableCell className="text-sm">{formatDate(entry.actual_deployment_date)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

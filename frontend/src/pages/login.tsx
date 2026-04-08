@@ -33,14 +33,15 @@ export function LoginPage() {
     try {
       const response = await authApi.login(data);
       
+      // Optimistic store update — replaced immediately by the real profile below
       login(response.access_token, {
         id: 0,
         username: data.username,
         email: "",
         is_active: true,
-        is_admin: false,
+        roles: [],
       });
-      
+
       const userProfile = await authApi.getMe();
       
       login(response.access_token, userProfile);

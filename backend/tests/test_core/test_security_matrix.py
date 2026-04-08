@@ -1,231 +1,156 @@
 import pytest
-from unittest.mock import MagicMock
-from app.core.security_matrix import SecurityMatrixEngine, RoleLevel, StateCategory
+from app.core.security_matrix import SecurityMatrixEngine, Permission, StateCategory
 
 
 class MockRole:
-    def __init__(self, priority: int):
-        self.priority = priority
+    def __init__(self, permissions: list[str]):
+        self.permissions = permissions
 
 
 class MockUser:
-    def __init__(self, role_priority: int | None):
-        self.role = MockRole(role_priority) if role_priority else None
+    def __init__(self, permissions: list[str]):
+        self.role = MockRole(permissions) if permissions is not None else None
 
 
-class TestSecurityMatrixEngine:
-    def test_admin_role_level(self):
-        user = MockUser(1)
-        assert SecurityMatrixEngine.get_user_role_level(user) == RoleLevel.ADMIN
+# ---------------------------------------------------------------------------
+# has_permission
+# ---------------------------------------------------------------------------
+class TestHasPermission:
+    def test_user_with_permission_returns_true(self):
+        user = MockUser([Permission.DEV_REQUEST_UPDATE])
+        assert SecurityMatrixEngine.has_permission(user, Permission.DEV_REQUEST_UPDATE)
 
-    def test_pm_role_level(self):
-        user = MockUser(2)
-        assert SecurityMatrixEngine.get_user_role_level(user) == RoleLevel.PM
+    def test_user_without_permission_returns_false(self):
+        user = MockUser([Permission.DEV_REQUEST_READ])
+        assert not SecurityMatrixEngine.has_permission(user, Permission.DEV_REQUEST_UPDATE)
 
-    def test_developer_role_level(self):
-        user = MockUser(3)
-        assert SecurityMatrixEngine.get_user_role_level(user) == RoleLevel.DEVELOPER
+    def test_user_without_role_returns_false(self):
+        user = MockUser.__new__(MockUser)
+        user.role = None
+        assert not SecurityMatrixEngine.has_permission(user, Permission.DEV_REQUEST_READ)
 
-    def test_view_only_role_level(self):
-        user = MockUser(7)
-        assert SecurityMatrixEngine.get_user_role_level(user) == RoleLevel.VIEW_ONLY
-
-    def test_user_without_role_defaults_to_view_only(self):
-        user = MockUser(None)
-        assert SecurityMatrixEngine.get_user_role_level(user) == RoleLevel.VIEW_ONLY
-
-
-class TestFieldPermissions:
-    def test_admin_can_edit_all_fields_in_open_state(self):
-        admin = MockUser(1)
-        fields = [
-            "request_type_id",
-            "description",
-            "functional_category_id",
-            "priority_id",
-            "assigned_developer_id",
-            "comments",
-        ]
-        for field in fields:
-            assert SecurityMatrixEngine.can_edit_field(
-                RoleLevel.ADMIN, StateCategory.OPEN, field
-            ), f"Admin should be able to edit {field} in Open state"
-
-    def test_pm_can_edit_all_fields_in_open_state(self):
-        pm = MockUser(2)
-        fields = [
-            "request_type_id",
-            "description",
-            "functional_category_id",
-            "priority_id",
-            "assigned_developer_id",
-            "comments",
-        ]
-        for field in fields:
-            assert SecurityMatrixEngine.can_edit_field(
-                RoleLevel.PM, StateCategory.OPEN, field
-            ), f"PM should be able to edit {field} in Open state"
-
-    def test_developer_can_only_edit_assigned_developer_in_open_state(self):
-        dev = MockUser(3)
-        assert SecurityMatrixEngine.can_edit_field(
-            RoleLevel.DEVELOPER, StateCategory.OPEN, "assigned_developer_id"
-        )
-        assert not SecurityMatrixEngine.can_edit_field(
-            RoleLevel.DEVELOPER, StateCategory.OPEN, "request_type_id"
-        )
-        assert not SecurityMatrixEngine.can_edit_field(
-            RoleLevel.DEVELOPER, StateCategory.OPEN, "priority_id"
-        )
-
-    def test_developer_cannot_edit_core_fields_in_in_progress(self):
-        dev = MockUser(3)
-        assert not SecurityMatrixEngine.can_edit_field(
-            RoleLevel.DEVELOPER, StateCategory.IN_PROGRESS, "request_type_id"
-        )
-        assert not SecurityMatrixEngine.can_edit_field(
-            RoleLevel.DEVELOPER, StateCategory.IN_PROGRESS, "priority_id"
-        )
-        assert not SecurityMatrixEngine.can_edit_field(
-            RoleLevel.DEVELOPER, StateCategory.IN_PROGRESS, "description"
-        )
-
-    def test_admin_can_edit_fields_in_in_progress(self):
-        admin = MockUser(1)
-        assert SecurityMatrixEngine.can_edit_field(
-            RoleLevel.ADMIN, StateCategory.IN_PROGRESS, "request_type_id"
-        )
-        assert SecurityMatrixEngine.can_edit_field(
-            RoleLevel.ADMIN, StateCategory.IN_PROGRESS, "priority_id"
-        )
-
-    def test_no_one_can_edit_core_fields_in_closed_state_except_admin(self):
-        for role in [RoleLevel.PM, RoleLevel.DEVELOPER, RoleLevel.TESTER, RoleLevel.SERVER_ADMIN]:
-            assert not SecurityMatrixEngine.can_edit_field(
-                role, StateCategory.CLOSED, "request_type_id"
-            ), f"{role.name} should not edit request_type_id in Closed state"
-
-        assert SecurityMatrixEngine.can_edit_field(
-            RoleLevel.ADMIN, StateCategory.CLOSED, "request_type_id"
-        )
-
-    def test_comments_always_editable_by_r1_r6_in_open_in_progress(self):
-        editable_roles = [
-            RoleLevel.ADMIN,
-            RoleLevel.PM,
-            RoleLevel.DEVELOPER,
-            RoleLevel.TESTER,
-            RoleLevel.SERVER_ADMIN,
-            RoleLevel.RELEASE_MANAGER,
-        ]
-        for role in editable_roles:
-            assert SecurityMatrixEngine.can_edit_field(
-                role, StateCategory.OPEN, "comments"
-            ), f"{role.name} should edit comments in Open state"
-            assert SecurityMatrixEngine.can_edit_field(
-                role, StateCategory.IN_PROGRESS, "comments"
-            ), f"{role.name} should edit comments in In Progress state"
+    def test_user_with_empty_permissions_returns_false(self):
+        user = MockUser([])
+        assert not SecurityMatrixEngine.has_permission(user, Permission.SYSTEM_MANAGE)
 
 
-class TestStateTransitionPermissions:
-    def test_admin_can_transition_state(self):
-        assert SecurityMatrixEngine.can_transition_state(RoleLevel.ADMIN)
+# ---------------------------------------------------------------------------
+# State-aware helpers
+# ---------------------------------------------------------------------------
+class TestStateAwareHelpers:
+    def test_can_edit_in_open_state_with_update_permission(self):
+        user = MockUser([Permission.DEV_REQUEST_UPDATE])
+        assert SecurityMatrixEngine.can_edit_in_state(user, StateCategory.OPEN)
 
-    def test_pm_can_transition_state(self):
-        assert SecurityMatrixEngine.can_transition_state(RoleLevel.PM)
+    def test_cannot_edit_in_open_state_without_update_permission(self):
+        user = MockUser([Permission.DEV_REQUEST_READ])
+        assert not SecurityMatrixEngine.can_edit_in_state(user, StateCategory.OPEN)
 
-    def test_developer_cannot_transition_state(self):
-        assert not SecurityMatrixEngine.can_transition_state(RoleLevel.DEVELOPER)
+    def test_only_system_manage_can_edit_in_closed_state(self):
+        admin = MockUser([Permission.SYSTEM_MANAGE, Permission.DEV_REQUEST_UPDATE])
+        regular = MockUser([Permission.DEV_REQUEST_UPDATE])
+        assert SecurityMatrixEngine.can_edit_in_state(admin, StateCategory.CLOSED)
+        assert not SecurityMatrixEngine.can_edit_in_state(regular, StateCategory.CLOSED)
 
-    def test_tester_cannot_transition_state(self):
-        assert not SecurityMatrixEngine.can_transition_state(RoleLevel.TESTER)
+    def test_can_transition_state(self):
+        user = MockUser([Permission.DEV_REQUEST_STATE_CHANGE])
+        no_perm = MockUser([Permission.DEV_REQUEST_READ])
+        assert SecurityMatrixEngine.can_transition_state(user)
+        assert not SecurityMatrixEngine.can_transition_state(no_perm)
 
+    def test_can_reopen(self):
+        user = MockUser([Permission.DEV_REQUEST_REOPEN])
+        no_perm = MockUser([Permission.DEV_REQUEST_UPDATE])
+        assert SecurityMatrixEngine.can_reopen(user)
+        assert not SecurityMatrixEngine.can_reopen(no_perm)
 
-class TestReopenPermissions:
-    def test_admin_can_reopen(self):
-        assert SecurityMatrixEngine.can_reopen(RoleLevel.ADMIN)
-
-    def test_pm_can_reopen(self):
-        assert SecurityMatrixEngine.can_reopen(RoleLevel.PM)
-
-    def test_developer_cannot_reopen(self):
-        assert not SecurityMatrixEngine.can_reopen(RoleLevel.DEVELOPER)
-
-
-class TestModuleLinePermissions:
-    def test_admin_can_add_module_lines(self):
-        assert SecurityMatrixEngine.can_add_module_lines(RoleLevel.ADMIN)
-
-    def test_pm_can_add_module_lines(self):
-        assert SecurityMatrixEngine.can_add_module_lines(RoleLevel.PM)
-
-    def test_developer_can_add_module_lines(self):
-        assert SecurityMatrixEngine.can_add_module_lines(RoleLevel.DEVELOPER)
-
-    def test_tester_cannot_add_module_lines(self):
-        assert not SecurityMatrixEngine.can_add_module_lines(RoleLevel.TESTER)
+    def test_can_add_module_lines(self):
+        user = MockUser([Permission.DEV_REQUEST_LINE_CREATE])
+        no_perm = MockUser([Permission.DEV_REQUEST_READ])
+        assert SecurityMatrixEngine.can_add_module_lines(user)
+        assert not SecurityMatrixEngine.can_add_module_lines(no_perm)
 
 
+# ---------------------------------------------------------------------------
+# filter_allowed_updates
+# ---------------------------------------------------------------------------
 class TestFilterAllowedUpdates:
-    def test_filter_removes_unauthorized_fields(self):
-        user = MockUser(3)
-        update_data = {
-            "request_type_id": 1,
-            "priority_id": 2,
-            "assigned_developer_id": 5,
-        }
+    def test_filter_removes_header_fields_without_update_permission(self):
+        user = MockUser([Permission.DEV_REQUEST_READ])
+        update_data = {"request_type_id": 1, "priority_id": 2}
         allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
             user, StateCategory.OPEN, update_data
         )
-        assert "assigned_developer_id" in allowed
         assert "request_type_id" in rejected
         assert "priority_id" in rejected
+        assert len(allowed) == 0
 
-    def test_filter_allows_authorized_fields(self):
-        user = MockUser(1)
-        update_data = {
-            "request_type_id": 1,
-            "priority_id": 2,
-            "comments": "Test comment",
-        }
+    def test_filter_allows_header_fields_with_update_permission(self):
+        user = MockUser([Permission.DEV_REQUEST_UPDATE])
+        update_data = {"request_type_id": 1, "priority_id": 2}
         allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
             user, StateCategory.OPEN, update_data
         )
         assert len(rejected) == 0
+        assert "request_type_id" in allowed
+
+    def test_filter_allows_comments_with_comments_permission(self):
+        user = MockUser([Permission.COMMENTS_CREATE])
+        update_data = {"comments": "hello"}
+        allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
+            user, StateCategory.OPEN, update_data
+        )
+        assert "comments" in allowed
+        assert len(rejected) == 0
+
+    def test_filter_blocks_all_for_closed_state_without_system_manage(self):
+        user = MockUser([Permission.DEV_REQUEST_UPDATE])
+        update_data = {"request_type_id": 1}
+        allowed, rejected = SecurityMatrixEngine.filter_allowed_updates(
+            user, StateCategory.CLOSED, update_data
+        )
+        assert "request_type_id" in rejected
 
 
+# ---------------------------------------------------------------------------
+# get_permissions_payload
+# ---------------------------------------------------------------------------
 class TestPermissionsPayload:
-    def test_permissions_payload_contains_required_fields(self):
-        user = MockUser(1)
-        payload = SecurityMatrixEngine.get_permissions_payload(user, StateCategory.OPEN)
-        required_fields = [
-            "can_edit_request_type",
-            "can_edit_description",
-            "can_edit_functional_category",
-            "can_edit_priority",
-            "can_edit_assigned_developer",
-            "can_edit_comments",
-            "can_edit_state",
-            "can_reopen",
-            "can_add_module_lines",
-            "current_role_level",
+    def test_payload_contains_required_fields(self):
+        user = MockUser([Permission.SYSTEM_MANAGE] + [
+            Permission.DEV_REQUEST_UPDATE, Permission.DEV_REQUEST_STATE_CHANGE,
+            Permission.DEV_REQUEST_REOPEN, Permission.DEV_REQUEST_LINE_CREATE,
+            Permission.COMMENTS_CREATE,
+        ])
+        payload = SecurityMatrixEngine.get_permissions_payload(user)
+        required = [
+            "can_update", "can_edit_request_type", "can_edit_description",
+            "can_edit_functional_category", "can_edit_priority",
+            "can_edit_assigned_developer", "can_edit_comments",
+            "can_edit_state", "can_reopen", "can_add_module_lines",
+            "can_manage_system",
         ]
-        for field in required_fields:
+        for field in required:
             assert field in payload, f"Missing field: {field}"
 
-    def test_admin_permissions_in_open_state(self):
-        user = MockUser(1)
-        payload = SecurityMatrixEngine.get_permissions_payload(user, StateCategory.OPEN)
-        assert payload["can_edit_request_type"]
-        assert payload["can_edit_priority"]
+    def test_full_admin_permissions(self):
+        user = MockUser([
+            Permission.SYSTEM_MANAGE, Permission.DEV_REQUEST_UPDATE,
+            Permission.DEV_REQUEST_STATE_CHANGE, Permission.DEV_REQUEST_REOPEN,
+            Permission.DEV_REQUEST_LINE_CREATE, Permission.COMMENTS_CREATE,
+        ])
+        payload = SecurityMatrixEngine.get_permissions_payload(user)
+        assert payload["can_update"]
         assert payload["can_edit_state"]
         assert payload["can_reopen"]
-
-    def test_developer_permissions_in_open_state(self):
-        user = MockUser(3)
-        payload = SecurityMatrixEngine.get_permissions_payload(user, StateCategory.OPEN)
-        assert not payload["can_edit_request_type"]
-        assert not payload["can_edit_priority"]
-        assert not payload["can_edit_state"]
         assert payload["can_add_module_lines"]
-        assert payload["current_role_level"] == 3
+        assert payload["can_manage_system"]
+
+    def test_view_only_permissions(self):
+        user = MockUser([Permission.DEV_REQUEST_READ])
+        payload = SecurityMatrixEngine.get_permissions_payload(user)
+        assert not payload["can_update"]
+        assert not payload["can_edit_state"]
+        assert not payload["can_reopen"]
+        assert not payload["can_add_module_lines"]
+        assert not payload["can_manage_system"]

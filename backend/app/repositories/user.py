@@ -1,10 +1,8 @@
 from typing import Optional
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.repositories.base import BaseRepository
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class UserRepository(BaseRepository[User]):
@@ -22,20 +20,25 @@ class UserRepository(BaseRepository[User]):
         username: str,
         email: str,
         password: str,
-        is_admin: bool = False,
         is_active: bool = True,
-        role_id: int | None = None,
+        role_ids: list[int] | None = None,
     ) -> User:
-        hashed_password = pwd_context.hash(password)
+        from app.models.role import Role
+
+        hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         user = User(
             username=username,
             email=email,
             hashed_password=hashed_password,
-            is_admin=is_admin,
             is_active=is_active,
-            role_id=role_id,
         )
-        return self.create(user)
+        if role_ids:
+            roles = self.db.query(Role).filter(Role.id.in_(role_ids)).all()
+            user.roles = roles
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user
 
     def update_user(
         self,
@@ -43,30 +46,30 @@ class UserRepository(BaseRepository[User]):
         username: str | None = None,
         email: str | None = None,
         password: str | None = None,
-        is_admin: bool | None = None,
         is_active: bool | None = None,
-        role_id: int | None = None,
+        role_ids: list[int] | None = None,
     ) -> User | None:
+        from app.models.role import Role
+
         user = self.get(user_id)
         if not user:
             return None
-        
+
         if username is not None:
             user.username = username
         if email is not None:
             user.email = email
         if password is not None:
-            user.hashed_password = pwd_context.hash(password)
-        if is_admin is not None:
-            user.is_admin = is_admin
+            user.hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         if is_active is not None:
             user.is_active = is_active
-        if role_id is not None:
-            user.role_id = role_id
-        
+        if role_ids is not None:
+            roles = self.db.query(Role).filter(Role.id.in_(role_ids)).all()
+            user.roles = roles
+
         self.db.commit()
         self.db.refresh(user)
         return user
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        return pwd_context.verify(plain_password, hashed_password)
+        return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())

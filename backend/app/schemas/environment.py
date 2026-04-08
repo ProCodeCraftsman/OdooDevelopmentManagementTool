@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from app.models.environment import EnvironmentCategory
 
 
 class EnvironmentCreate(BaseModel):
@@ -9,7 +10,7 @@ class EnvironmentCreate(BaseModel):
     user: str
     password: str
     order: int = 0
-    category: str = "unknown"
+    category: EnvironmentCategory = EnvironmentCategory.DEVELOPMENT
 
 
 class EnvironmentUpdate(BaseModel):
@@ -18,7 +19,7 @@ class EnvironmentUpdate(BaseModel):
     user: Optional[str] = None
     password: Optional[str] = None
     order: Optional[int] = None
-    category: Optional[str] = None
+    category: Optional[EnvironmentCategory] = None
     is_active: Optional[bool] = None
 
 
@@ -29,7 +30,7 @@ class EnvironmentResponse(BaseModel):
     db_name: str
     user: str
     order: int
-    category: str
+    category: EnvironmentCategory
     is_active: bool
 
     class Config:
@@ -39,9 +40,11 @@ class EnvironmentResponse(BaseModel):
 class EnvironmentList(BaseModel):
     id: int
     name: str
+    url: str
     order: int
-    category: str
+    category: EnvironmentCategory
     is_active: bool
+    last_sync: Optional[str] = None
 
     class Config:
         from_attributes = True

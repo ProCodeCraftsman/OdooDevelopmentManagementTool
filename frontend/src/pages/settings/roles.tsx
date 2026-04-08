@@ -25,20 +25,38 @@ import { cn } from "@/lib/utils";
 const roleSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
-  permissions: z.string().optional(),
+  permissions: z.array(z.string()),
   priority: z.number().int().min(0).max(100),
 });
 
 type RoleFormData = z.infer<typeof roleSchema>;
 
-const PERMISSION_OPTIONS = [
-  { key: "platform:write", label: "Platform Management" },
-  { key: "users:write", label: "User Management" },
-  { key: "environments:write", label: "Environment Management" },
-  { key: "modules:write", label: "Module Write" },
-  { key: "modules:read", label: "Module Read" },
-  { key: "reports:write", label: "Reports Write" },
-  { key: "reports:read", label: "Reports Read" },
+const PERMISSION_OPTIONS: { key: string; label: string; group: string }[] = [
+  { group: "System", key: "system:manage", label: "System Manage" },
+  { group: "Environments", key: "environments:read", label: "Environments Read" },
+  { group: "Environments", key: "sync:trigger", label: "Sync Trigger" },
+  { group: "Environments", key: "modules_master:read", label: "Modules Master Read" },
+  { group: "Dev Requests", key: "dev_request:read", label: "Read" },
+  { group: "Dev Requests", key: "dev_request:create", label: "Create" },
+  { group: "Dev Requests", key: "dev_request:update", label: "Update" },
+  { group: "Dev Requests", key: "dev_request:state_change", label: "State Change" },
+  { group: "Dev Requests", key: "dev_request:reopen", label: "Reopen" },
+  { group: "Dev Requests", key: "dev_request:archive", label: "Archive" },
+  { group: "Dev Request Lines", key: "dev_request_line:create", label: "Create Lines" },
+  { group: "Dev Request Lines", key: "dev_request_line:update", label: "Update Lines" },
+  { group: "Dev Request Lines", key: "dev_request_line:delete", label: "Delete Lines" },
+  { group: "Dev Request Lines", key: "uat:update", label: "UAT Update" },
+  { group: "Artifacts", key: "comments:create", label: "Create Comments" },
+  { group: "Artifacts", key: "attachments:create", label: "Create Attachments" },
+  { group: "Artifacts", key: "attachments:delete", label: "Delete Attachments" },
+  { group: "Release Plans", key: "release_plan:read", label: "Read" },
+  { group: "Release Plans", key: "release_plan:create", label: "Create" },
+  { group: "Release Plans", key: "release_plan:update", label: "Update" },
+  { group: "Release Plans", key: "release_plan:delete", label: "Delete" },
+  { group: "Release Plans", key: "release_plan:approve", label: "Approve" },
+  { group: "Reports", key: "reports:read", label: "Read" },
+  { group: "Reports", key: "reports:generate", label: "Generate" },
+  { group: "Reports", key: "reports:export", label: "Export" },
 ];
 
 export function SettingsRolesPage() {
@@ -57,25 +75,17 @@ export function SettingsRolesPage() {
     defaultValues: {
       name: "",
       description: "",
-      permissions: "",
+      permissions: [],
       priority: 50,
     },
   });
 
   const onSubmit = async (data: RoleFormData) => {
     try {
-      const permissions = data.permissions || PERMISSION_OPTIONS
-        .map((opt) => opt.key)
-        .filter((key) => data.permissions?.includes(key))
-        .join(",");
-      
       if (editingRole) {
-        await updateRole.mutateAsync({
-          id: editingRole.id,
-          data: { ...data, permissions },
-        });
+        await updateRole.mutateAsync({ id: editingRole.id, data });
       } else {
-        await createRole.mutateAsync({ ...data, permissions });
+        await createRole.mutateAsync(data);
       }
       setIsDialogOpen(false);
       form.reset();
@@ -90,7 +100,7 @@ export function SettingsRolesPage() {
     form.reset({
       name: role.name,
       description: role.description || "",
-      permissions: role.permissions || "",
+      permissions: role.permissions ?? [],
       priority: role.priority,
     });
     setIsDialogOpen(true);
@@ -108,17 +118,11 @@ export function SettingsRolesPage() {
   };
 
   const togglePermission = (permission: string) => {
-    const current = form.getValues("permissions") || "";
-    const permissions = current.split(",").filter(Boolean);
-    const index = permissions.indexOf(permission);
-    
-    if (index >= 0) {
-      permissions.splice(index, 1);
-    } else {
-      permissions.push(permission);
-    }
-    
-    form.setValue("permissions", permissions.join(","));
+    const current = form.getValues("permissions") ?? [];
+    const next = current.includes(permission)
+      ? current.filter((p) => p !== permission)
+      : [...current, permission];
+    form.setValue("permissions", next);
   };
 
   return (
@@ -178,14 +182,14 @@ export function SettingsRolesPage() {
                   <span className="font-medium">{role.priority}</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {role.permissions?.split(",").filter(Boolean).slice(0, 3).map((perm) => (
+                  {(role.permissions ?? []).slice(0, 3).map((perm) => (
                     <Badge key={perm} variant="outline" className="text-xs">
                       {perm}
                     </Badge>
                   ))}
-                  {(role.permissions?.split(",").filter(Boolean).length || 0) > 3 && (
+                  {(role.permissions?.length ?? 0) > 3 && (
                     <Badge variant="outline" className="text-xs">
-                      +{(role.permissions?.split(",").filter(Boolean).length || 0) - 3}
+                      +{(role.permissions?.length ?? 0) - 3}
                     </Badge>
                   )}
                 </div>
@@ -249,30 +253,35 @@ export function SettingsRolesPage() {
             </div>
             <div className="space-y-2">
               <Label>Permissions</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {PERMISSION_OPTIONS.map((opt) => {
-                  const permissions = form.getValues("permissions")?.split(",").filter(Boolean) || [];
-                  const isSelected = permissions.includes(opt.key);
-                  return (
-                    <label
-                      key={opt.key}
-                      className={cn(
-                        "flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors",
-                        isSelected
-                          ? "bg-primary/10 border-primary"
-                          : "hover:bg-muted"
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => togglePermission(opt.key)}
-                        className="sr-only"
-                      />
-                      <span className="text-xs">{opt.label}</span>
-                    </label>
-                  );
-                })}
+              <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+                {Array.from(new Set(PERMISSION_OPTIONS.map((o) => o.group))).map((group) => (
+                  <div key={group}>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">{group}</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      {PERMISSION_OPTIONS.filter((o) => o.group === group).map((opt) => {
+                        const selected = form.watch("permissions") ?? [];
+                        const isSelected = selected.includes(opt.key);
+                        return (
+                          <label
+                            key={opt.key}
+                            className={cn(
+                              "flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors",
+                              isSelected ? "bg-primary/10 border-primary" : "hover:bg-muted",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => togglePermission(opt.key)}
+                              className="sr-only"
+                            />
+                            <span className="text-xs">{opt.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             <DialogFooter>

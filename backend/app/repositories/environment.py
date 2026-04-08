@@ -15,6 +15,9 @@ class EnvironmentRepository(BaseRepository[Environment]):
     def get_by_name(self, name: str) -> Optional[Environment]:
         return self.db.query(Environment).filter(Environment.name == name).first()
 
+    def get_by_url(self, url: str) -> Optional[Environment]:
+        return self.db.query(Environment).filter(Environment.url == url).first()
+
     def get_active(self) -> List[Environment]:
         return self.db.query(Environment).filter(Environment.is_active == True).all()
 

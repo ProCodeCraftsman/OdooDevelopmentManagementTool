@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -25,8 +24,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DataTable, DataTableColumnHeader } from "@/components/ui/data-table";
+import { type ColumnDef } from "@tanstack/react-table";
 import { useEnvironments, useCreateEnvironment, useUpdateEnvironment, useDeleteEnvironment } from "@/hooks/useEnvironments";
-import type { EnvironmentList } from "@/types/api";
+import { environmentsApi } from "@/api/environments";
+import { ENVIRONMENT_CATEGORIES, type EnvironmentList } from "@/types/api";
 import { toast } from "sonner";
 
 const environmentSchema = z.object({
@@ -36,7 +45,7 @@ const environmentSchema = z.object({
   user: z.string().min(1, "User is required"),
   password: z.string().min(1, "Password is required"),
   order: z.number(),
-  category: z.string(),
+  category: z.enum(["Development", "Staging", "Production"]),
 });
 
 type EnvironmentFormData = z.infer<typeof environmentSchema>;
@@ -54,29 +63,16 @@ export function SettingsEnvironmentsPage() {
 
   const form = useForm<EnvironmentFormData>({
     resolver: zodResolver(environmentSchema),
-    defaultValues: {
-      name: "",
-      url: "",
-      db_name: "",
-      user: "",
-      password: "",
-      order: 0,
-      category: "unknown",
-    },
+    defaultValues: { name: "", url: "", db_name: "", user: "", password: "", order: 0, category: "Development" },
   });
 
   const onSubmit = async (data: EnvironmentFormData) => {
     try {
       if (editingEnv) {
-        const updateData = {
-          url: data.url,
-          db_name: data.db_name,
-          user: data.user,
-          password: data.password,
-          order: data.order,
-          category: data.category,
-        };
-        await updateEnvironment.mutateAsync({ name: editingEnv.name, data: updateData });
+        await updateEnvironment.mutateAsync({
+          name: editingEnv.name,
+          data: { url: data.url, db_name: data.db_name, user: data.user, password: data.password, order: data.order, category: data.category },
+        });
         toast.success("Environment updated");
       } else {
         await createEnvironment.mutateAsync(data);
@@ -90,23 +86,26 @@ export function SettingsEnvironmentsPage() {
     }
   };
 
-  const onFormSubmit = form.handleSubmit(onSubmit);
-
-  const handleEdit = (env: EnvironmentList) => {
+  const handleEdit = async (env: EnvironmentList) => {
     setEditingEnv(env);
-    form.reset({
-      name: env.name,
-      url: "",
-      db_name: "",
-      user: "",
-      password: "",
-      order: env.order,
-      category: env.category,
-    });
+    try {
+      const fullEnv = await environmentsApi.get(env.name);
+      form.reset({
+        name: fullEnv.name,
+        url: fullEnv.url,
+        db_name: fullEnv.db_name,
+        user: fullEnv.user,
+        password: "",
+        order: fullEnv.order,
+        category: fullEnv.category,
+      });
+    } catch {
+      form.reset({ name: env.name, url: "", db_name: "", user: "", password: "", order: env.order, category: env.category });
+    }
     setIsSheetOpen(true);
   };
 
-  const handleDelete = async () => {
+  const handleDeleteConfirm = async () => {
     if (!envToDelete) return;
     try {
       await deleteEnvironment.mutateAsync(envToDelete);
@@ -118,6 +117,67 @@ export function SettingsEnvironmentsPage() {
     }
   };
 
+  const columns: ColumnDef<EnvironmentList>[] = useMemo(
+    () => [
+      {
+        accessorKey: "name",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+        cell: ({ row }) => (
+          <div>
+            <div className="font-medium">{row.getValue("name")}</div>
+            <div className="text-xs text-muted-foreground md:hidden">
+              {row.original.category} • Order: {row.original.order}
+            </div>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "category",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
+        cell: ({ row }) => <span className="text-sm">{row.getValue("category")}</span>,
+      },
+      {
+        accessorKey: "order",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Order" />,
+        cell: ({ row }) => <span className="text-sm">{row.getValue("order")}</span>,
+      },
+      {
+        accessorKey: "is_active",
+        header: "Status",
+        cell: ({ row }) => (
+          <Badge variant={row.original.is_active ? "default" : "secondary"}>
+            {row.original.is_active ? "Active" : "Inactive"}
+          </Badge>
+        ),
+      },
+      {
+        id: "actions",
+        header: () => <div className="text-right">Actions</div>,
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-1">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleEdit(row.original); }}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEnvToDelete(row.original.name);
+                setDeleteDialogOpen(true);
+              }}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -127,13 +187,7 @@ export function SettingsEnvironmentsPage() {
         </div>
         <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
           <SheetTrigger asChild>
-            <Button
-              onClick={() => {
-                setEditingEnv(null);
-                form.reset();
-              }}
-              className="w-full sm:w-auto"
-            >
+            <Button onClick={() => { setEditingEnv(null); form.reset(); }} className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Add Environment
             </Button>
@@ -142,32 +196,24 @@ export function SettingsEnvironmentsPage() {
             <SheetHeader className="text-left">
               <SheetTitle>{editingEnv ? "Edit Environment" : "Add Environment"}</SheetTitle>
               <SheetDescription>
-                {editingEnv
-                  ? "Update the environment details"
-                  : "Enter the details for the new Odoo server"}
+                {editingEnv ? "Update the environment details" : "Enter the details for the new Odoo server"}
               </SheetDescription>
             </SheetHeader>
-            <form onSubmit={onFormSubmit} className="space-y-4 mt-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6">
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input id="name" {...form.register("name")} />
-                {form.formState.errors.name && (
-                  <p className="text-sm text-red-500">{form.formState.errors.name.message}</p>
-                )}
+                {form.formState.errors.name && <p className="text-sm text-red-500">{form.formState.errors.name.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="url">URL</Label>
                 <Input id="url" placeholder="https://odoo.example.com" {...form.register("url")} />
-                {form.formState.errors.url && (
-                  <p className="text-sm text-red-500">{form.formState.errors.url.message}</p>
-                )}
+                {form.formState.errors.url && <p className="text-sm text-red-500">{form.formState.errors.url.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="db_name">Database Name</Label>
                 <Input id="db_name" {...form.register("db_name")} />
-                {form.formState.errors.db_name && (
-                  <p className="text-sm text-red-500">{form.formState.errors.db_name.message}</p>
-                )}
+                {form.formState.errors.db_name && <p className="text-sm text-red-500">{form.formState.errors.db_name.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="user">User</Label>
@@ -180,15 +226,25 @@ export function SettingsEnvironmentsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="order">Order</Label>
-                  <Input
-                    id="order"
-                    type="number"
-                    {...form.register("order", { valueAsNumber: true })}
-                  />
+                  <Input id="order" type="number" {...form.register("order", { valueAsNumber: true })} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="category">Category</Label>
-                  <Input id="category" {...form.register("category")} />
+                  <Select
+                    onValueChange={(value) => form.setValue("category", value as "Development" | "Staging" | "Production")}
+                    defaultValue={form.getValues("category")}
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ENVIRONMENT_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <Button type="submit" className="w-full">
@@ -200,66 +256,16 @@ export function SettingsEnvironmentsPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Environments ({environments?.length || 0})</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle>Environments ({environments?.length ?? 0})</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full min-w-[600px]">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-3 text-left text-sm font-medium">Name</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium hidden md:table-cell">Category</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium hidden sm:table-cell">Order</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium">Status</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {environments?.map((env) => (
-                    <tr key={env.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{env.name}</div>
-                        <div className="text-xs text-muted-foreground md:hidden">{env.category} • Order: {env.order}</div>
-                      </td>
-                      <td className="px-4 py-3 text-sm hidden md:table-cell">{env.category}</td>
-                      <td className="px-4 py-3 text-sm hidden sm:table-cell">{env.order}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={env.is_active ? "default" : "secondary"}>
-                          {env.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(env)} className="h-8 w-8">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setEnvToDelete(env.name);
-                              setDeleteDialogOpen(true);
-                            }}
-                            className="h-8 w-8"
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable
+            columns={columns}
+            data={environments ?? []}
+            loading={isLoading}
+            searchable={false}
+          />
         </CardContent>
       </Card>
 
@@ -272,12 +278,8 @@ export function SettingsEnvironmentsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

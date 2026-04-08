@@ -1,158 +1,164 @@
-import { useComparisonReport } from "@/hooks/useReports";
+import { useMemo, useState } from "react";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
 import { DataTable, DataTableColumnHeader } from "@/components/ui/data-table";
-import { useState, useMemo } from "react";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Search, SearchX, X } from "lucide-react";
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { type ColumnDef } from "@tanstack/react-table";
+import { useModuleMaster } from "@/hooks/useModuleMaster";
+import { exportModuleMasterXlsx } from "@/api/module-master";
+import type { ModuleMasterRecord } from "@/api/module-master";
+
+function joinFilter(values: string[]): string | undefined {
+  return values.length > 0 ? values.join(",") : undefined;
+}
 
 export function ModulesPage() {
-  const { data: report, isLoading: isReportLoading } = useComparisonReport();
-  const [search, setSearch] = useState("");
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(15);
+  const {
+    data,
+    isFetching,
+    pagination,
+    pageIndex,
+    pageSize,
+    onPaginationChange,
+    search,
+    onSearchChange,
+    onSortingChange,
+    filterOptions,
+    technicalNames,
+    setTechnicalNames,
+    shortdescs,
+    setShortdescs,
+  } = useModuleMaster({ limit: 20 });
 
-  const hasSearch = search.trim().length > 0;
+  const [exporting, setExporting] = useState(false);
 
-  // For now, use the report data transformed to match ModuleMasterRecord shape
-  const moduleMasterData = useMemo(() => {
-    if (!report?.rows) return [];
-    return report.rows.map((row, index) => ({
-      id: index,
-      technical_name: row.technical_name,
-      shortdesc: row.module_name || null,
-      first_seen_date: null, // Will be populated when API is ready
-    }));
-  }, [report]);
+  const sortBy = useMemo(() => {
+    return "technical_name";
+  }, []);
 
-  const filteredData = useMemo(() => {
-    if (!search.trim()) return moduleMasterData;
-    const searchLower = search.toLowerCase();
-    return moduleMasterData.filter(
-      (row) =>
-        row.technical_name.toLowerCase().includes(searchLower) ||
-        (row.shortdesc && row.shortdesc.toLowerCase().includes(searchLower))
-    );
-  }, [moduleMasterData, search]);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportModuleMasterXlsx({
+        search: search || undefined,
+        technical_names: joinFilter(technicalNames),
+        shortdescs: joinFilter(shortdescs),
+        sort_by: sortBy,
+        sort_order: "asc",
+      });
+      toast.success("Exported successfully");
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
-  const columns: ColumnDef<typeof moduleMasterData[0]>[] = useMemo(
+  const columns: ColumnDef<ModuleMasterRecord>[] = useMemo(
     () => [
       {
         accessorKey: "technical_name",
-        header: ({ column }: { column: { getIsSorted: () => "asc" | "desc" | false; getToggleSortingHandler: () => ((event: unknown) => void) | undefined } }) => (
+        header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Technical Name" />
         ),
-        cell: ({ row }: { row: { getValue: (key: string) => unknown } }): React.ReactNode => (
-          <div className="font-mono text-sm">{String(row.getValue("technical_name"))}</div>
+        cell: ({ row }) => (
+          <div className="font-mono text-sm">{row.getValue("technical_name")}</div>
         ),
       },
       {
         accessorKey: "shortdesc",
-        header: ({ column }: { column: { getIsSorted: () => "asc" | "desc" | false; getToggleSortingHandler: () => ((event: unknown) => void) | undefined } }) => (
+        header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Description" />
         ),
-        cell: ({ row }: { row: { getValue: (key: string) => unknown } }): React.ReactNode => (
+        cell: ({ row }) => (
           <span className="text-muted-foreground">
-            {String(row.getValue("shortdesc") || "-")}
+            {(row.getValue("shortdesc") as string | null) || "-"}
           </span>
         ),
       },
       {
         accessorKey: "first_seen_date",
-        header: ({ column }: { column: { getIsSorted: () => "asc" | "desc" | false; getToggleSortingHandler: () => ((event: unknown) => void) | undefined } }) => (
+        header: ({ column }) => (
           <DataTableColumnHeader column={column} title="First Seen" />
         ),
-        cell: ({ row }: { row: { getValue: (key: string) => unknown } }): React.ReactNode => {
-          const value = row.getValue("first_seen_date");
+        cell: ({ row }) => {
+          const value = row.getValue("first_seen_date") as string | null;
           if (!value) return <span className="text-muted-foreground">-</span>;
-          const date = new Date(value as string);
-          return <span>{date.toLocaleDateString()}</span>;
+          return <span>{new Date(value).toLocaleDateString()}</span>;
         },
       },
     ],
     []
   );
 
-  const isEmpty = filteredData.length === 0;
+  const rows = data?.data ?? [];
+  const totalPages = pagination?.total_pages ?? 0;
+  const totalRecords = pagination?.total_records ?? 0;
+
+  const technicalNameOptions = filterOptions?.technical_names ?? [];
+  const shortdescOptions = filterOptions?.shortdescs ?? [];
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold">Module Master</h2>
-        <p className="text-muted-foreground">Browse all tracked modules</p>
-      </div>
-
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Filter by technical name..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 pr-9"
-        />
-        {hasSearch && (
-          <button
-            onClick={() => setSearch("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        <p className="text-muted-foreground">
+          {totalRecords > 0 ? `${totalRecords} modules tracked` : "Browse all tracked modules"}
+        </p>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Modules ({filteredData.length})</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle>Modules</CardTitle>
         </CardHeader>
         <CardContent>
-          {isReportLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : isEmpty ? (
-            <div className="flex flex-col items-center justify-center p-8">
-              {hasSearch ? (
-                <>
-                  <SearchX className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No modules found</h3>
-                  <p className="text-muted-foreground text-center mb-4">
-                    No modules match your search "{search}".
-                  </p>
-                  <Button variant="outline" onClick={() => setSearch("")}>
-                    Clear Search
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <SearchX className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No modules</h3>
-                  <p className="text-muted-foreground text-center">
-                    No modules have been synced yet.
-                  </p>
-                </>
-              )}
-            </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={filteredData}
-              pageIndex={pageIndex}
-              pageSize={pageSize}
-              onPaginationChange={(pagination) => {
-                setPageIndex(pagination.pageIndex);
-                setPageSize(pagination.pageSize);
-              }}
-              searchable={false}
-              searchValue={search}
-              onSearchChange={() => {}}
-              loading={isReportLoading}
-              pageCount={Math.ceil(filteredData.length / pageSize)}
-            />
-          )}
+          <DataTable
+            columns={columns}
+            data={rows}
+            pagination={pagination}
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            onPaginationChange={onPaginationChange}
+            pageCount={totalPages}
+            searchable
+            searchPlaceholder="Filter by technical name..."
+            searchValue={search}
+            onSearchChange={onSearchChange}
+            onSortingChange={onSortingChange}
+            loading={isFetching}
+            filterBar={
+              <div className="flex flex-wrap items-center gap-2">
+                <SearchableMultiSelect
+                  options={technicalNameOptions}
+                  selected={technicalNames}
+                  onChange={setTechnicalNames}
+                  allLabel="Technical Name"
+                  searchPlaceholder="Search names..."
+                  triggerWidth="w-[170px]"
+                />
+                <SearchableMultiSelect
+                  options={shortdescOptions}
+                  selected={shortdescs}
+                  onChange={setShortdescs}
+                  allLabel="Description"
+                  searchPlaceholder="Search descriptions..."
+                  triggerWidth="w-[180px]"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={handleExport}
+                  disabled={exporting || !totalRecords}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export
+                </Button>
+              </div>
+            }
+          />
         </CardContent>
       </Card>
     </div>

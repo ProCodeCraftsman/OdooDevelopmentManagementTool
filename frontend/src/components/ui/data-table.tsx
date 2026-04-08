@@ -1,5 +1,34 @@
 "use client";
 
+/**
+ * Universal Table Standard
+ * ========================
+ * All data tables in this application use this DataTable component.
+ *
+ * Usage patterns:
+ *
+ * 1. Server-side (modules, dev-requests):
+ *    - Pass `pagination`, `pageIndex`, `pageSize`, `onPaginationChange`, `pageCount`
+ *    - Pass `onSearchChange` + `searchValue` for debounced server search
+ *    - Pass `onSortingChange` to bubble sort state to hook
+ *
+ * 2. Client-side (environments, users — small lists, no server pagination):
+ *    - Pass `data` only; omit `pagination` / `onPaginationChange`
+ *    - DataTable shows all rows (manualPagination respects provided data as-is)
+ *
+ * 3. Custom filters (dev-requests):
+ *    - Pass `filterBar` with any filter JSX; rendered above the table
+ *
+ * 4. Clickable rows (dev-requests):
+ *    - Pass `onRowClick`; rows get cursor-pointer and hover style
+ *
+ * 5. Custom empty states:
+ *    - Pass `emptyState` JSX shown when data is empty and not loading
+ *
+ * Loading state renders skeleton rows matching the column count.
+ * Table header is sticky by default.
+ */
+
 import * as React from "react";
 import {
   type ColumnDef,
@@ -11,12 +40,14 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   type FilterFn,
+  type Row,
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, ChevronsUpDown, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -47,6 +78,8 @@ declare module "@tanstack/react-table" {
   }
 }
 
+// ─── Pagination footer ────────────────────────────────────────────────────────
+
 interface DataTablePaginationProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   table: any;
@@ -76,7 +109,7 @@ export function DataTablePagination({ table }: DataTablePaginationProps) {
             <SelectValue placeholder={table.getState().pagination.pageSize} />
           </SelectTrigger>
           <SelectContent side="top">
-            {[15, 25, 50, 100].map((pageSize) => (
+            {[15, 20, 25, 50, 100].map((pageSize) => (
               <SelectItem key={pageSize} value={String(pageSize)}>
                 {pageSize}
               </SelectItem>
@@ -104,6 +137,8 @@ export function DataTablePagination({ table }: DataTablePaginationProps) {
   );
 }
 
+// ─── Sortable column header ───────────────────────────────────────────────────
+
 export function DataTableColumnHeader({
   column,
   title,
@@ -119,9 +154,7 @@ export function DataTableColumnHeader({
   const sorting = column.getIsSorted();
 
   return (
-    <div
-      className={cn("flex items-center gap-2", className)}
-    >
+    <div className={cn("flex items-center gap-2", className)}>
       <Button
         variant="ghost"
         size="sm"
@@ -144,6 +177,8 @@ export function DataTableColumnHeader({
   );
 }
 
+// ─── PaginationInfo type (mirrors backend response shape) ────────────────────
+
 export interface PaginationInfo {
   total_records: number;
   total_pages: number;
@@ -151,22 +186,37 @@ export interface PaginationInfo {
   limit: number;
 }
 
+// ─── DataTable ────────────────────────────────────────────────────────────────
+
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  // Server-side pagination
   pagination?: PaginationInfo;
   pageIndex?: number;
   pageSize?: number;
   onPaginationChange?: (pagination: PaginationState) => void;
+  pageCount?: number;
+  // Search
   searchable?: boolean;
   searchPlaceholder?: string;
   onSearchChange?: (value: string) => void;
   searchValue?: string;
+  // Sorting
+  onSortingChange?: (sorting: SortingState) => void;
+  // Grouping
   groupable?: boolean;
   groupBy?: string;
   onGroupByChange?: (value: string | null) => void;
+  // State
   loading?: boolean;
-  pageCount?: number;
+  // Extension slots
+  /** Custom filter controls rendered above the table (below search). */
+  filterBar?: React.ReactNode;
+  /** Called when a row is clicked. Adds cursor-pointer to rows. */
+  onRowClick?: (row: TData) => void;
+  /** Shown when data is empty and not loading. Defaults to "No results." */
+  emptyState?: React.ReactNode;
 }
 
 export function DataTable<TData, TValue>({
@@ -174,7 +224,7 @@ export function DataTable<TData, TValue>({
   data,
   pagination,
   pageIndex = 0,
-  pageSize = 15,
+  pageSize = 20,
   onPaginationChange,
   searchable = true,
   searchPlaceholder = "Search...",
@@ -185,9 +235,24 @@ export function DataTable<TData, TValue>({
   onGroupByChange,
   loading = false,
   pageCount = -1,
+  onSortingChange: onSortingChangeProp,
+  filterBar,
+  onRowClick,
+  emptyState,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState(searchValue);
+
+  const handleSortingChange = React.useCallback(
+    (updater: React.SetStateAction<SortingState>) => {
+      setSorting((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        onSortingChangeProp?.(next);
+        return next;
+      });
+    },
+    [onSortingChangeProp]
+  );
 
   const table = useReactTable({
     data,
@@ -195,7 +260,7 @@ export function DataTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    onSortingChange: setSorting,
+    onSortingChange: handleSortingChange,
     onGlobalFilterChange: setGlobalFilter,
     filterFns: {
       fuzzy: (row, columnId, value) => {
@@ -208,20 +273,14 @@ export function DataTable<TData, TValue>({
     state: {
       sorting,
       globalFilter,
-      pagination: {
-        pageIndex,
-        pageSize,
-      },
+      pagination: { pageIndex, pageSize },
     },
     pageCount: pageCount >= 0 ? pageCount : undefined,
     onPaginationChange: (updater) => {
       if (onPaginationChange) {
         const newState =
           typeof updater === "function"
-            ? updater({
-                pageIndex,
-                pageSize,
-              })
+            ? updater({ pageIndex, pageSize })
             : updater;
         onPaginationChange(newState);
       }
@@ -230,6 +289,7 @@ export function DataTable<TData, TValue>({
     manualSorting: true,
   });
 
+  // Debounce search → server
   React.useEffect(() => {
     if (onSearchChange && globalFilter !== searchValue) {
       const timeout = setTimeout(() => {
@@ -239,121 +299,135 @@ export function DataTable<TData, TValue>({
     }
   }, [globalFilter, onSearchChange, searchValue]);
 
+  const skeletonRowCount = Math.min(pageSize, 8);
+  const columnCount = columns.length;
+
+  const defaultEmptyState = (
+    <TableRow>
+      <TableCell colSpan={columnCount} className="h-32 text-center text-muted-foreground">
+        No results.
+      </TableCell>
+    </TableRow>
+  );
+
+  const hasToolbar = searchable || filterBar || groupable;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-        {searchable && (
-          <div className="relative w-full sm:w-auto">
-            <Input
-              placeholder={searchPlaceholder}
-              value={globalFilter}
-              onChange={(event) => setGlobalFilter(event.target.value)}
-              className="max-w-sm"
-            />
-            {globalFilter && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-0 top-0 h-full px-2"
-                onClick={() => setGlobalFilter("")}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
+      {hasToolbar && (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            {searchable && (
+              <div className="relative w-full sm:w-auto">
+                <Input
+                  placeholder={searchPlaceholder}
+                  value={globalFilter}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                  className="max-w-sm pr-8"
+                />
+                {globalFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-2"
+                    onClick={() => setGlobalFilter("")}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            )}
+            {groupable && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="ml-auto">
+                    Group by
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Group by</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={!groupBy}
+                    onCheckedChange={() => onGroupByChange?.(null)}
+                  >
+                    None
+                  </DropdownMenuCheckboxItem>
+                  {columns.map((col) => {
+                    const id = col.id || ((col as { accessorKey?: string }).accessorKey) || String(col);
+                    if (!id) return null;
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={id}
+                        checked={groupBy === id}
+                        onCheckedChange={() => onGroupByChange?.(id)}
+                      >
+                        {typeof col.header === "string"
+                          ? col.header
+                          : id.charAt(0).toUpperCase() + id.slice(1)}
+                      </DropdownMenuCheckboxItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
-        )}
-
-        {groupable && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="ml-auto">
-                Group by
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Group by</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={!groupBy}
-                onCheckedChange={() => onGroupByChange?.(null)}
-              >
-                None
-              </DropdownMenuCheckboxItem>
-              {columns.map((col) => {
-                const id = col.id as string;
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={id}
-                    checked={groupBy === id}
-                    onCheckedChange={() => onGroupByChange?.(id)}
-                  >
-                    {typeof col.header === "string"
-                      ? col.header
-                      : id.charAt(0).toUpperCase() + id.slice(1)}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-10">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() && "selected"}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-24 text-center"
-                  >
-                    No results.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          {filterBar && <div>{filterBar}</div>}
         </div>
       )}
 
+      {/* ── Table ───────────────────────────────────────────────────────── */}
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-background">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: skeletonRowCount }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: columnCount }).map((_, j) => (
+                    <TableCell key={j}>
+                      <Skeleton className="h-5 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row: Row<TData>) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  className={cn(onRowClick && "cursor-pointer hover:bg-muted/50")}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : (
+              emptyState ?? defaultEmptyState
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* ── Pagination ──────────────────────────────────────────────────── */}
       {pagination && <DataTablePagination table={table} />}
     </div>
   );

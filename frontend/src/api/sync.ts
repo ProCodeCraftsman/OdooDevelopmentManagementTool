@@ -10,6 +10,10 @@ export const syncApi = {
     const response = await api.get<SyncJobResponse>(`/sync/${jobId}`);
     return response.data;
   },
+  getLastSync: async (envName: string): Promise<SyncJobResponse> => {
+    const response = await api.get<SyncJobResponse>(`/sync/${envName}/last-sync`);
+    return response.data;
+  },
   triggerAll: async (): Promise<SyncJobResponse[]> => {
     const response = await api.post<SyncJobResponse[]>(`/sync/sync-all`);
     return response.data;

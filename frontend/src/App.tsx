@@ -16,6 +16,9 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { DevelopmentRequestsListPage } from "@/pages/development-requests/list";
 import { DevelopmentRequestsDetailPage } from "@/pages/development-requests/detail";
 import { DevelopmentRequestsFormPage } from "@/pages/development-requests/form";
+import { ReleasePlansListPage } from "@/pages/release-plans/list";
+import { ReleasePlanDetailPage } from "@/pages/release-plans/detail";
+import { ReleasePlanFormPage } from "@/pages/release-plans/form";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -24,8 +27,10 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const isAdmin = useAuthStore((state) => state.user?.is_admin);
-  return isAuthenticated && isAdmin ? <>{children}</> : <Navigate to="/dashboard" replace />;
+  const hasSystemManage = useAuthStore(
+    (state) => state.user?.roles?.some((r) => r.permissions?.includes("system:manage")) ?? false,
+  );
+  return isAuthenticated && hasSystemManage ? <>{children}</> : <Navigate to="/dashboard" replace />;
 }
 
 function App() {
@@ -51,7 +56,10 @@ function App() {
           <Route path="development-requests" element={<DevelopmentRequestsListPage />} />
           <Route path="development-requests/new" element={<DevelopmentRequestsFormPage />} />
           <Route path="development-requests/:id" element={<DevelopmentRequestsDetailPage />} />
-          <Route path="development-requests/:id/edit" element={<DevelopmentRequestsFormPage />} />
+          <Route path="release-plans" element={<ReleasePlansListPage />} />
+          <Route path="release-plans/new" element={<ReleasePlanFormPage />} />
+          <Route path="release-plans/:id" element={<ReleasePlanDetailPage />} />
+          <Route path="release-plans/:id/edit" element={<ReleasePlanFormPage />} />
           <Route path="settings/environments" element={<SettingsEnvironmentsPage />} />
           <Route
             path="settings/users"

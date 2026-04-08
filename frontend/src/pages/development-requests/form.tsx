@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,107 +17,62 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  useDevelopmentRequest,
   useControlParameters,
   useCreateDevelopmentRequest,
-  useUpdateDevelopmentRequest,
 } from "@/hooks/useDevelopmentRequests";
-import type { DevelopmentRequestCreate, DevelopmentRequestUpdate } from "@/api/development-requests";
+import { useAssignableUsers } from "@/hooks/useUsers";
+import type { DevelopmentRequestCreate } from "@/api/development-requests";
 import { toast } from "sonner";
 
 const formSchema = z.object({
+  title: z.string().min(1, "Title is required").max(255, "Title must be under 255 characters"),
   request_type_id: z.number().min(1, "Request type is required"),
   functional_category_id: z.number().min(1, "Category is required"),
   priority_id: z.number().min(1, "Priority is required"),
-  description: z.string().min(1, "Description is required"),
-  comments: z.string().optional(),
-  uat_request_id: z.string().optional(),
   assigned_developer_id: z.number().optional(),
-  request_state_id: z.number().optional(),
-  parent_request_id: z.number().optional(),
+  description: z.string().min(1, "Description is required"),
+  additional_info: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
 
 export function DevelopmentRequestsFormPage() {
-  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const isEditing = !!id;
-  const requestId = parseInt(id || "0");
 
-  const { data: existingRequest, isLoading: isLoadingRequest } = useDevelopmentRequest(requestId);
   const { data: controlParams, isLoading: isLoadingParams } = useControlParameters();
+  const { data: assignableUsers } = useAssignableUsers();
   const createMutation = useCreateDevelopmentRequest();
-  const updateMutation = useUpdateDevelopmentRequest();
 
   const {
     register,
     handleSubmit,
     setValue,
     watch,
-    reset,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      description: "",
-      comments: "",
-    },
+    defaultValues: { description: "" },
   });
-
-  useEffect(() => {
-    if (existingRequest && isEditing) {
-      reset({
-        request_type_id: existingRequest.request_type_id,
-        functional_category_id: existingRequest.functional_category_id,
-        priority_id: existingRequest.priority_id,
-        description: existingRequest.description,
-        comments: existingRequest.comments || "",
-        uat_request_id: existingRequest.uat_request_id || "",
-        assigned_developer_id: existingRequest.assigned_developer_id || undefined,
-        request_state_id: existingRequest.request_state_id || undefined,
-        parent_request_id: existingRequest.parent_request_id || undefined,
-      });
-    }
-  }, [existingRequest, isEditing, reset]);
 
   const onSubmit = async (data: FormData) => {
     try {
-      if (isEditing) {
-        const updateData: DevelopmentRequestUpdate = {
-          request_type_id: data.request_type_id,
-          functional_category_id: data.functional_category_id,
-          priority_id: data.priority_id,
-          description: data.description,
-          comments: data.comments,
-          uat_request_id: data.uat_request_id,
-          assigned_developer_id: data.assigned_developer_id,
-          request_state_id: data.request_state_id,
-          parent_request_id: data.parent_request_id,
-        };
-        await updateMutation.mutateAsync({ id: requestId, data: updateData });
-        toast.success("Request updated successfully");
-      } else {
-        const createData: DevelopmentRequestCreate = {
-          request_type_id: data.request_type_id,
-          functional_category_id: data.functional_category_id,
-          priority_id: data.priority_id,
-          description: data.description,
-          comments: data.comments,
-          uat_request_id: data.uat_request_id,
-          assigned_developer_id: data.assigned_developer_id,
-          parent_request_id: data.parent_request_id,
-        };
-        await createMutation.mutateAsync(createData);
-        toast.success("Request created successfully");
-      }
+      const createData: DevelopmentRequestCreate = {
+        title: data.title,
+        request_type_id: data.request_type_id,
+        functional_category_id: data.functional_category_id,
+        priority_id: data.priority_id,
+        description: data.description,
+        additional_info: data.additional_info || undefined,
+        assigned_developer_id: data.assigned_developer_id,
+      };
+      await createMutation.mutateAsync(createData);
       navigate("/development-requests");
     } catch {
-      toast.error(`Failed to ${isEditing ? "update" : "create"} request`);
+      toast.error("Failed to create request");
     }
   };
 
-  if (isLoadingRequest || isLoadingParams) {
+  if (isLoadingParams) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-10 w-[300px]" />
@@ -131,14 +85,12 @@ export function DevelopmentRequestsFormPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" asChild>
-          <Link to={isEditing ? `/development-requests/${id}` : "/development-requests"}>
+          <Link to="/development-requests">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Link>
         </Button>
-        <h1 className="text-3xl font-bold">
-          {isEditing ? "Edit Request" : "New Development Request"}
-        </h1>
+        <h1 className="text-3xl font-bold">New Development Request</h1>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -147,6 +99,19 @@ export function DevelopmentRequestsFormPage() {
             <CardTitle>Request Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Title — full width, first */}
+            <div className="space-y-2">
+              <Label htmlFor="title">Title *</Label>
+              <Input
+                id="title"
+                placeholder="Brief summary of the request"
+                {...register("title")}
+              />
+              {errors.title && (
+                <p className="text-sm text-destructive">{errors.title.message}</p>
+              )}
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="request_type_id">Request Type *</Label>
@@ -166,34 +131,12 @@ export function DevelopmentRequestsFormPage() {
                   </SelectContent>
                 </Select>
                 {errors.request_type_id && (
-                  <p className="text-sm text-red-500">{errors.request_type_id.message}</p>
+                  <p className="text-sm text-destructive">{errors.request_type_id.message}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="priority_id">Priority *</Label>
-                <Select
-                  value={watch("priority_id")?.toString() || ""}
-                  onValueChange={(v) => setValue("priority_id", parseInt(v))}
-                >
-                  <SelectTrigger id="priority_id">
-                    <SelectValue placeholder="Select priority" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {controlParams?.priorities.map((priority) => (
-                      <SelectItem key={priority.id} value={priority.id.toString()}>
-                        {priority.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.priority_id && (
-                  <p className="text-sm text-red-500">{errors.priority_id.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="functional_category_id">Category *</Label>
+                <Label htmlFor="functional_category_id">Functional Category *</Label>
                 <Select
                   value={watch("functional_category_id")?.toString() || ""}
                   onValueChange={(v) => setValue("functional_category_id", parseInt(v))}
@@ -210,20 +153,54 @@ export function DevelopmentRequestsFormPage() {
                   </SelectContent>
                 </Select>
                 {errors.functional_category_id && (
-                  <p className="text-sm text-red-500">
+                  <p className="text-sm text-destructive">
                     {errors.functional_category_id.message}
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="priority_id">Priority *</Label>
+                <Select
+                  value={watch("priority_id")?.toString() || ""}
+                  onValueChange={(v) => setValue("priority_id", parseInt(v))}
+                >
+                  <SelectTrigger id="priority_id">
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {controlParams?.priorities.map((p) => (
+                      <SelectItem key={p.id} value={p.id.toString()}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.priority_id && (
+                  <p className="text-sm text-destructive">{errors.priority_id.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="assigned_developer_id">Assignee</Label>
-                <Input
-                  id="assigned_developer_id"
-                  type="number"
-                  placeholder="Developer ID (optional)"
-                  {...register("assigned_developer_id", { valueAsNumber: true })}
-                />
+                <Select
+                  value={watch("assigned_developer_id")?.toString() || "none"}
+                  onValueChange={(v) =>
+                    setValue("assigned_developer_id", v === "none" ? undefined : parseInt(v))
+                  }
+                >
+                  <SelectTrigger id="assigned_developer_id">
+                    <SelectValue placeholder="Select assignee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {assignableUsers?.map((user) => (
+                      <SelectItem key={user.id} value={user.id.toString()}>
+                        {user.username}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -231,64 +208,37 @@ export function DevelopmentRequestsFormPage() {
               <Label htmlFor="description">Description *</Label>
               <Textarea
                 id="description"
-                placeholder="Describe the request..."
+                placeholder="Describe the request in detail..."
                 className="min-h-[150px]"
                 {...register("description")}
               />
               {errors.description && (
-                <p className="text-sm text-red-500">{errors.description.message}</p>
+                <p className="text-sm text-destructive">{errors.description.message}</p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="comments">Comments</Label>
+              <Label htmlFor="additional_info">Additional Info</Label>
               <Textarea
-                id="comments"
-                placeholder="Additional comments..."
+                id="additional_info"
+                placeholder="Any additional context or notes (optional)..."
                 className="min-h-[100px]"
-                {...register("comments")}
+                {...register("additional_info")}
               />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="uat_request_id">UAT Request ID</Label>
-                <Input
-                  id="uat_request_id"
-                  placeholder="UAT-XXXX (optional)"
-                  {...register("uat_request_id")}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="parent_request_id">Parent Request ID</Label>
-                <Input
-                  id="parent_request_id"
-                  type="number"
-                  placeholder="Parent request ID (optional)"
-                  {...register("parent_request_id", { valueAsNumber: true })}
-                />
-              </div>
             </div>
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-4">
+        <div className="flex justify-end gap-3">
           <Button
             type="button"
             variant="outline"
-            onClick={() =>
-              navigate(isEditing ? `/development-requests/${id}` : "/development-requests")
-            }
+            onClick={() => navigate("/development-requests")}
           >
             Cancel
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting
-              ? "Saving..."
-              : isEditing
-                ? "Update Request"
-                : "Create Request"}
+            {isSubmitting ? "Creating..." : "Create Request"}
           </Button>
         </div>
       </form>

@@ -6,18 +6,22 @@ export interface User {
   username: string;
   email: string;
   is_active: boolean;
-  is_admin: boolean;
-  role_id: number | null;
-  role: Pick<Role, "id" | "name" | "priority"> | null;
+  roles: Pick<Role, "id" | "name" | "priority" | "permissions">[];
+}
+
+export interface UserCreate {
+  username: string;
+  email: string;
+  password: string;
+  role_ids: number[];
 }
 
 export interface UserUpdate {
   username?: string;
   email?: string;
   password?: string;
-  is_admin?: boolean;
   is_active?: boolean;
-  role_id?: number | null;
+  role_ids?: number[];
 }
 
 export const usersApi = {
@@ -26,8 +30,18 @@ export const usersApi = {
     return response.data;
   },
 
+  listAssignable: async (): Promise<User[]> => {
+    const response = await api.get("/users/assignable");
+    return response.data;
+  },
+
   get: async (id: number): Promise<User> => {
     const response = await api.get(`/users/${id}`);
+    return response.data;
+  },
+
+  create: async (data: UserCreate): Promise<User> => {
+    const response = await api.post("/users", data);
     return response.data;
   },
 

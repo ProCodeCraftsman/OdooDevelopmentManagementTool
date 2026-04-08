@@ -1,11 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { environmentsApi } from "@/api/environments";
+import { environmentsApi, type GetEnvironmentModulesParams, type GetModuleDependenciesParams } from "@/api/environments";
 import type { EnvironmentUpdate } from "@/types/api";
 
 export const environmentKeys = {
   all: ["environments"] as const,
   list: () => [...environmentKeys.all, "list"] as const,
   detail: (name: string) => [...environmentKeys.all, "detail", name] as const,
+  modules: (name: string, params?: GetEnvironmentModulesParams) =>
+    [...environmentKeys.all, "modules", name, params] as const,
+  dependencies: (name: string, params?: GetModuleDependenciesParams) =>
+    [...environmentKeys.all, "dependencies", name, params] as const,
+  filterOptions: (name: string) =>
+    [...environmentKeys.all, "filterOptions", name] as const,
 };
 
 export function useEnvironments() {
@@ -20,6 +26,31 @@ export function useEnvironment(name: string) {
     queryKey: environmentKeys.detail(name),
     queryFn: () => environmentsApi.get(name),
     enabled: !!name,
+  });
+}
+
+export function useEnvironmentModules(name: string, params?: GetEnvironmentModulesParams) {
+  return useQuery({
+    queryKey: environmentKeys.modules(name, params),
+    queryFn: () => environmentsApi.getModules(name, params),
+    enabled: !!name,
+  });
+}
+
+export function useModuleDependencies(name: string, params?: GetModuleDependenciesParams) {
+  return useQuery({
+    queryKey: environmentKeys.dependencies(name, params),
+    queryFn: () => environmentsApi.getDependencies(name, params),
+    enabled: !!name,
+  });
+}
+
+export function useEnvironmentFilterOptions(name: string) {
+  return useQuery({
+    queryKey: environmentKeys.filterOptions(name),
+    queryFn: () => environmentsApi.getFilterOptions(name),
+    enabled: !!name,
+    staleTime: 60000,
   });
 }
 

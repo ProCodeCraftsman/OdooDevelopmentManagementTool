@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, environments, sync, reports, roles, users, development_requests, modules
+from app.api.v1 import auth, environments, sync, reports, roles, users, development_requests, modules, release_plans, dashboard, saved_views
 
 api_router = APIRouter()
 
@@ -11,3 +11,6 @@ api_router.include_router(roles.router)
 api_router.include_router(users.router)
 api_router.include_router(development_requests.router)
 api_router.include_router(modules.router)
+api_router.include_router(release_plans.router)
+api_router.include_router(dashboard.router)
+api_router.include_router(saved_views.router)

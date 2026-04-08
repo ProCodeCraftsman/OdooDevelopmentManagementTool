@@ -316,14 +316,14 @@ class TestUserResponseSchema:
         assert "username" in data
         assert "email" in data
         assert "is_active" in data
-        assert "is_admin" in data
+        assert "is_active" in data
         assert "role_id" in data
         
         assert isinstance(data["id"], int)
         assert isinstance(data["username"], str)
         assert isinstance(data["email"], str)
         assert isinstance(data["is_active"], bool)
-        assert isinstance(data["is_admin"], bool)
+        assert isinstance(data["is_active"], bool)
 
 
 class TestRegisterWithRole:

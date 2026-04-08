@@ -14,7 +14,7 @@ from app.models.module import Module
 from app.models.sync_record import SyncRecord
 from app.models.environment import Environment
 from app.models.development_request import RequestModuleLine, RequestReleasePlanLine
-from app.core.security_matrix import RoleLevel
+from app.core.security_matrix import Permission
 
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -29,9 +29,22 @@ def db_session():
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
 
-    admin_role = Role(id=1, name="Admin", priority=RoleLevel.ADMIN, is_active=True)
-    pm_role = Role(id=2, name="PM", priority=RoleLevel.PM, is_active=True)
-    dev_role = Role(id=3, name="Developer", priority=RoleLevel.DEVELOPER, is_active=True)
+    admin_perms = [Permission.SYSTEM_MANAGE, Permission.DEV_REQUEST_READ,
+                   Permission.DEV_REQUEST_CREATE, Permission.DEV_REQUEST_UPDATE,
+                   Permission.DEV_REQUEST_STATE_CHANGE, Permission.DEV_REQUEST_REOPEN,
+                   Permission.DEV_REQUEST_LINE_CREATE, Permission.DEV_REQUEST_LINE_UPDATE,
+                   Permission.DEV_REQUEST_LINE_DELETE, Permission.COMMENTS_CREATE]
+    pm_perms = [Permission.DEV_REQUEST_READ, Permission.DEV_REQUEST_CREATE,
+                Permission.DEV_REQUEST_UPDATE, Permission.DEV_REQUEST_STATE_CHANGE,
+                Permission.DEV_REQUEST_REOPEN, Permission.DEV_REQUEST_LINE_CREATE,
+                Permission.COMMENTS_CREATE]
+    dev_perms = [Permission.DEV_REQUEST_READ, Permission.DEV_REQUEST_CREATE,
+                 Permission.DEV_REQUEST_UPDATE, Permission.DEV_REQUEST_LINE_CREATE,
+                 Permission.DEV_REQUEST_LINE_UPDATE, Permission.COMMENTS_CREATE]
+
+    admin_role = Role(id=1, name="Admin", priority=1, permissions=admin_perms, is_active=True)
+    pm_role = Role(id=2, name="PM", priority=2, permissions=pm_perms, is_active=True)
+    dev_role = Role(id=3, name="Developer", priority=5, permissions=dev_perms, is_active=True)
     db.add_all([admin_role, pm_role, dev_role])
 
     req_type_dev = RequestType(id=1, name="Bug Fix", category="Development", is_active=True)
@@ -92,7 +105,7 @@ def admin_user(db_session):
     from app.services.auth_service import auth_service
     hashed = auth_service.hash_password("testpassword")
     admin = User(
-        id=1, username="admin", email="admin@test.com", hashed_password=hashed, is_admin=True, role_id=1
+        id=1, username="admin", email="admin@test.com", hashed_password=hashed, role_id=1
     )
     db_session.add(admin)
     db_session.commit()
@@ -437,7 +450,9 @@ class TestStateTransitionsBusinessLogic:
         data = response.json()
         assert data["iteration_counter"] == 2
         assert data["request_close_date"] is None
-        assert "Reopened by" in data["comments"]
+        # Reopen comment is now stored in comments_thread (threaded comments), not the comments text field
+        assert len(data["comments_thread"]) > 0
+        assert any("[Reopen]" in c["content"] for c in data["comments_thread"])
 
 
 # =============================================================================

@@ -4,7 +4,7 @@ export interface Role {
   id: number;
   name: string;
   description: string | null;
-  permissions: string | null;
+  permissions: string[];
   priority: number;
   is_active: boolean;
   created_at: string;
