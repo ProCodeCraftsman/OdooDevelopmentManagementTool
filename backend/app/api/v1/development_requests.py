@@ -23,8 +23,6 @@ from app.repositories.development_request_state_type_rule import (
 from app.repositories.audit_log import AuditLogRepository
 from app.schemas.control_parameters import (
     ControlParametersResponse,
-    DR_MACRO_STATES,
-    DR_MACRO_TYPES,
     RequestTypeCreate,
     RequestTypeResponse,
     RequestStateCreate,
@@ -134,17 +132,25 @@ def list_control_parameters(
     )
 
 
+@router.get("/control-parameters/categories")
+def get_macro_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    type_repo = RequestTypeRepository(db)
+    state_repo = RequestStateRepository(db)
+    return {
+        "request_type_categories": type_repo.get_unique_categories(),
+        "request_state_categories": state_repo.get_unique_categories(),
+    }
+
+
 @router.post("/control-parameters/request-types", response_model=RequestTypeResponse)
 def create_request_type(
     data: RequestTypeCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions([Permission.SYSTEM_MANAGE])),
 ):
-    if data.category not in DR_MACRO_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Request type category must be one of: {', '.join(DR_MACRO_TYPES)}",
-        )
     repo = RequestTypeRepository(db)
     if repo.get_by(name=data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request type with this name already exists")
@@ -157,11 +163,6 @@ def create_request_state(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permissions([Permission.SYSTEM_MANAGE])),
 ):
-    if data.category not in DR_MACRO_STATES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Request state category must be one of: {', '.join(DR_MACRO_STATES)}",
-        )
     repo = RequestStateRepository(db)
     if repo.get_by(name=data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request state with this name already exists")

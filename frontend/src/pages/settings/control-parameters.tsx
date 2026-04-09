@@ -40,6 +40,7 @@ import {
   useControlParameterRules,
   useCreateControlParameterRule,
   useToggleControlParameterRule,
+  useMacroCategories,
   type ControlParameterType,
 } from "@/hooks/useControlParameters";
 import {
@@ -55,13 +56,13 @@ import type { ControlParameterWithUsage, ControlParameterRule } from "@/api/cont
 const requestTypeSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   description: z.string().optional(),
-  category: z.string().min(1, "Category is required").max(50),
+  category: z.string().min(1, "Category is required"),
 });
 
 const requestStateSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   description: z.string().optional(),
-  category: z.enum(["Draft", "In Progress", "Ready", "Done", "Cancelled"]),
+  category: z.string().min(1, "Category is required"),
 });
 
 const prioritySchema = z.object({
@@ -179,6 +180,7 @@ function ParameterRow({
 
 function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
   const { data: items, isLoading, error } = useControlParameterList("request-types");
+  const { data: categories } = useMacroCategories();
   const createMutation = useCreateControlParameter();
   const archiveMutation = useArchiveControlParameter();
   const restoreMutation = useRestoreControlParameter();
@@ -188,14 +190,17 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
 
+  const requestTypeCategories = categories?.request_type_categories ?? [];
+  const defaultCategory = requestTypeCategories[0] ?? "";
+
   const form = useForm<RequestTypeFormData>({
     resolver: zodResolver(requestTypeSchema),
-    defaultValues: { name: "", description: "", category: "" },
+    defaultValues: { name: "", description: "", category: defaultCategory },
   });
 
   const editForm = useForm<RequestTypeFormData>({
     resolver: zodResolver(requestTypeSchema),
-    defaultValues: { name: "", description: "", category: "" },
+    defaultValues: { name: "", description: "", category: defaultCategory },
   });
 
   const onSubmit = async (data: RequestTypeFormData) => {
@@ -229,7 +234,7 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
     editForm.reset({
       name: item.name,
       description: item.description || "",
-      category: (item.category as RequestTypeFormData["category"]) || "feature",
+      category: item.category || defaultCategory,
     });
     setIsEditSheetOpen(true);
   };
@@ -273,11 +278,13 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
                       {...form.register("category")}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
-                      <option value="">Select...</option>
-                      <option value="feature">Feature</option>
-                      <option value="bugfix">Bugfix</option>
-                      <option value="improvement">Improvement</option>
-                      <option value="other">Other</option>
+                      {requestTypeCategories.length === 0 ? (
+                        <option value="">No categories available</option>
+                      ) : (
+                        requestTypeCategories.map((type) => (
+                          <option key={type} value={type}>{type}</option>
+                        ))
+                      )}
                     </select>
                     {form.formState.errors.category && (
                       <p className="text-sm text-red-500">{form.formState.errors.category.message}</p>
@@ -347,6 +354,7 @@ function RequestTypeTab({ showArchived }: { showArchived: boolean }) {
 
 function RequestStateTab({ showArchived }: { showArchived: boolean }) {
   const { data: items, isLoading, error } = useControlParameterList("request-states");
+  const { data: categories } = useMacroCategories();
   const createMutation = useCreateControlParameter();
   const archiveMutation = useArchiveControlParameter();
   const restoreMutation = useRestoreControlParameter();
@@ -356,14 +364,17 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
 
+  const requestStateCategories = categories?.request_state_categories ?? [];
+  const defaultCategory = requestStateCategories[0] ?? "";
+
   const form = useForm<RequestStateFormData>({
     resolver: zodResolver(requestStateSchema),
-    defaultValues: { name: "", description: "", category: "Draft" },
+    defaultValues: { name: "", description: "", category: defaultCategory },
   });
 
   const editForm = useForm<RequestStateFormData>({
     resolver: zodResolver(requestStateSchema),
-    defaultValues: { name: "", description: "", category: "Draft" },
+    defaultValues: { name: "", description: "", category: defaultCategory },
   });
 
   const onSubmit = async (data: RequestStateFormData) => {
@@ -397,7 +408,7 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
     editForm.reset({
       name: item.name,
       description: item.description || "",
-      category: (item.category as RequestStateFormData["category"]) || "Draft",
+      category: item.category || defaultCategory,
     });
     setIsEditSheetOpen(true);
   };
@@ -441,11 +452,13 @@ function RequestStateTab({ showArchived }: { showArchived: boolean }) {
                       {...form.register("category")}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
-                      <option value="Draft">Draft</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Ready">Ready</option>
-                      <option value="Done">Done</option>
-                      <option value="Cancelled">Cancelled</option>
+                      {requestStateCategories.length === 0 ? (
+                        <option value="">No categories available</option>
+                      ) : (
+                        requestStateCategories.map((state) => (
+                          <option key={state} value={state}>{state}</option>
+                        ))
+                      )}
                     </select>
                   </div>
                   <Button type="submit" className="w-full" disabled={createMutation.isPending}>

@@ -84,3 +84,13 @@ class RequestStateRepository(BaseRepository[RequestState]):
         if obj:
             return len(obj.development_requests)
         return 0
+
+    def get_unique_categories(self) -> List[str]:
+        results = (
+            self.db.query(RequestState.category)
+            .filter(RequestState.category.isnot(None), RequestState.category != "")
+            .distinct()
+            .order_by(RequestState.category)
+            .all()
+        )
+        return [r[0] for r in results]

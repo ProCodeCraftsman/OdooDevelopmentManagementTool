@@ -76,3 +76,13 @@ class RequestTypeRepository(BaseRepository[RequestType]):
         if obj:
             return len(obj.development_requests)
         return 0
+
+    def get_unique_categories(self) -> List[str]:
+        results = (
+            self.db.query(RequestType.category)
+            .filter(RequestType.category.isnot(None), RequestType.category != "")
+            .distinct()
+            .order_by(RequestType.category)
+            .all()
+        )
+        return [r[0] for r in results]

@@ -78,6 +78,11 @@ export const controlParametersApi = {
     const response = await api.patch(`/development-requests/control-parameters/${endpoint}/${id}`, data);
     return response.data;
   },
+
+  getMacroCategories: async (): Promise<MacroCategories> => {
+    const response = await api.get("/development-requests/control-parameters/categories");
+    return response.data;
+  },
 };
 
 export interface ControlParameterRule {
@@ -103,6 +108,11 @@ export interface ControlParameterRuleUpdate {
   request_state_id?: number;
   request_type_id?: number;
   is_active?: boolean;
+}
+
+export interface MacroCategories {
+  request_type_categories: string[];
+  request_state_categories: string[];
 }
 
 export const controlParameterRulesApi = {

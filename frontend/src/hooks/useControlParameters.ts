@@ -6,6 +6,7 @@ export const controlParamKeys = {
   all: ["control-params"] as const,
   list: (paramType: string) => [...controlParamKeys.all, "list", paramType] as const,
   rules: ["control-params", "rules"] as const,
+  categories: ["control-params", "categories"] as const,
 };
 
 export type ControlParameterType = 
@@ -30,6 +31,7 @@ export function useCreateControlParameter() {
       controlParametersApi.create(paramType, data),
     onSuccess: (_, { paramType }) => {
       queryClient.invalidateQueries({ queryKey: controlParamKeys.list(paramType) });
+      queryClient.invalidateQueries({ queryKey: controlParamKeys.categories });
       toast.success("Parameter created successfully");
     },
     onError: (error: { response?: { data?: { detail?: string } } }) => {
@@ -159,5 +161,13 @@ export function useFunctionalCategories() {
   return useQuery({
     queryKey: [...controlParamKeys.list("functional-categories")],
     queryFn: () => controlParametersApi.listAll("functional-categories"),
+  });
+}
+
+export function useMacroCategories() {
+  return useQuery({
+    queryKey: controlParamKeys.categories,
+    queryFn: () => controlParametersApi.getMacroCategories(),
+    staleTime: 5 * 60 * 1000,
   });
 }
