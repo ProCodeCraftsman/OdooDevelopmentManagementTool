@@ -39,18 +39,18 @@ import {
 const mainNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Development Requests", href: "/development-requests", icon: ClipboardList },
-  { title: "Release Plans", href: "/release-plans", icon: GitBranch },
+  { title: "Release Plans (RP)", href: "/release-plans", icon: GitBranch },
 ];
 
 const drNavItems = [
-  { title: "Requests", href: "/development-requests", icon: ClipboardList },
+  { title: "Dev Requests (DR)", href: "/development-requests", icon: ClipboardList },
   { title: "DR Lines", href: "/development-requests/lines", icon: FileStack },
 ];
 
 const serverEnvNavItems = [
-  { title: "Modules", href: "/modules", icon: Package },
-  { title: "Environments", href: "/environments", icon: Server },
-  { title: "Reports", href: "/reports/comparison", icon: FileText },
+  { title: "Version Reports", href: "/reports/comparison", icon: FileText },
+  { title: "Server Envs", href: "/environments", icon: Server },
+  { title: "Module Master", href: "/modules", icon: Package },
 ];
 
 const settingsNavItems = [
@@ -230,7 +230,7 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
               <ClipboardList className="h-5 w-5" />
               {!collapsed && (
                 <>
-                  <span className="flex-1 text-left">Dev Requests</span>
+                  <span className="flex-1 text-left">Requests</span>
                   <ChevronDown
                     className={cn(
                       "h-4 w-4 transition-transform",
@@ -241,7 +241,7 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
               )}
             </Link>
           </TooltipTrigger>
-          {collapsed && <TooltipContent side="right">Dev Requests</TooltipContent>}
+          {collapsed && <TooltipContent side="right">Requests</TooltipContent>}
         </Tooltip>
 
         {!collapsed && (
@@ -261,7 +261,7 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
             <Link
-              to="/modules"
+              to="/reports/comparison"
               onClick={onToggleServerEnv}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
@@ -300,7 +300,7 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
         {isAdmin && (
           <>
             <div className="my-2 border-t" />
-            
+
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
                 <Link
@@ -406,15 +406,15 @@ export function Sidebar() {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.roles?.some((r) => r.permissions?.includes("system:manage")) ?? false;
 
-  const settingsExpanded = userToggledSettings 
-    ? settingsExpandedState 
+  const settingsExpanded = userToggledSettings
+    ? settingsExpandedState
     : location.pathname.startsWith("/settings");
 
   const isServerEnvActive = ["/modules", "/environments", "/reports/comparison"].some(
     (path) => location.pathname === path || location.pathname.startsWith(path + "/")
   );
-  const serverEnvExpanded = userToggledServerEnv 
-    ? serverEnvExpandedState 
+  const serverEnvExpanded = userToggledServerEnv
+    ? serverEnvExpandedState
     : isServerEnvActive;
 
   const isDrActive = location.pathname.startsWith("/development-requests");
@@ -464,17 +464,17 @@ export function Sidebar() {
             <SheetHeader className="border-b p-4">
               <SheetTitle className="text-left">Odoo Auditor</SheetTitle>
             </SheetHeader>
-            <NavContent 
-              collapsed={false} 
-              isMobile={isMobile} 
-              isAdmin={isAdmin} 
+            <NavContent
+              collapsed={false}
+              isMobile={isMobile}
+              isAdmin={isAdmin}
               settingsExpanded={settingsExpanded}
               serverEnvExpanded={serverEnvExpanded}
               drExpanded={drExpanded}
               onToggleSettings={handleToggleSettings}
               onToggleServerEnv={handleToggleServerEnv}
               onToggleDr={handleToggleDr}
-              onItemClick={handleMobileNavClick} 
+              onItemClick={handleMobileNavClick}
             />
           </SheetContent>
         </Sheet>
@@ -505,10 +505,10 @@ export function Sidebar() {
         </Button>
       </div>
 
-      <NavContent 
-        collapsed={collapsed} 
-        isMobile={isMobile} 
-        isAdmin={isAdmin} 
+      <NavContent
+        collapsed={collapsed}
+        isMobile={isMobile}
+        isAdmin={isAdmin}
         settingsExpanded={settingsExpanded}
         serverEnvExpanded={serverEnvExpanded}
         drExpanded={drExpanded}

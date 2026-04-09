@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, List, GitBranch, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, List, GitBranch, Download } from "lucide-react";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { type ColumnDef, type SortingState } from "@tanstack/react-table";
@@ -331,40 +331,52 @@ export function EnvironmentDetailPage() {
   const depStates = filterOptions?.dep_states ?? [];
 
   // ── Render ─────────────────────────────────────────────────────────────
+  const envCount = allEnvironments?.length ?? 0;
+  const currentEnvPos = currentEnvIndex >= 0 ? currentEnvIndex + 1 : 0;
+
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link to="/environments">
-            <Button variant="ghost" size="icon" className="shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+      {/* Breadcrumb + Prev/Next Navigation */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link to="/environments" className="hover:text-foreground transition-colors">
+            Environments
           </Link>
-          <div className="flex items-center gap-2">
+          <span>/</span>
+          <span className="text-foreground font-medium">{environment.name}</span>
+        </div>
+        {envCount > 0 && (
+          <div className="flex items-center gap-1">
             <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0"
-              onClick={() => prevEnv && navigate(`/environments/${prevEnv.name}`)}
+              variant="outline"
+              size="sm"
               disabled={!prevEnv}
+              onClick={() => prevEnv && navigate(`/environments/${prevEnv.name}`)}
+              className="h-7 px-2"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4 mr-1" />Prev
             </Button>
-            <div className="min-w-0">
-              <h2 className="text-xl md:text-2xl font-bold truncate">{environment.name}</h2>
-              <p className="text-muted-foreground text-sm truncate">{environment.url}</p>
-            </div>
+            <span className="text-xs text-muted-foreground px-1">
+              {currentEnvPos} / {envCount}
+            </span>
             <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0"
-              onClick={() => nextEnv && navigate(`/environments/${nextEnv.name}`)}
+              variant="outline"
+              size="sm"
               disabled={!nextEnv}
+              onClick={() => nextEnv && navigate(`/environments/${nextEnv.name}`)}
+              className="h-7 px-2"
             >
-              <ChevronRight className="h-4 w-4" />
+              Next<ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
+        )}
+      </div>
+
+      {/* Title + Status Badge */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-xl md:text-2xl font-bold truncate">{environment.name}</h2>
+          <p className="text-muted-foreground text-sm truncate">{environment.url}</p>
         </div>
         <Badge variant={environment.is_active ? "default" : "secondary"} className="shrink-0">
           {environment.is_active ? "Active" : "Inactive"}
