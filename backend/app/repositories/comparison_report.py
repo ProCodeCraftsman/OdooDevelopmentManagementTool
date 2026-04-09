@@ -277,18 +277,20 @@ class ComparisonReportRepository:
         upgrades = counts.get("Upgrade", 0)
         downgrades = counts.get("Error (Downgrade)", 0)
         missing = counts.get("Missing Module", 0) + counts.get("Error (Missing in Source)", 0)
-        return DriftSummaryCounts(total=total, upgrades=upgrades, downgrades=downgrades, missing=missing)
+        nomenclature_errors = counts.get("Error (Version Structure Mismatch)", 0)
+        return DriftSummaryCounts(total=total, upgrades=upgrades, downgrades=downgrades, missing=missing, nomenclature_errors=nomenclature_errors)
 
     def get_total_drift_count_for_dashboard(self, db: Session) -> Dict[str, int]:
         """Used by the dashboard summary endpoint."""
         report = self.get_latest_report(db)
         if not report:
-            return {"total": 0, "upgrades": 0, "downgrades": 0, "missing": 0, "has_report": 0}
+            return {"total": 0, "upgrades": 0, "downgrades": 0, "missing": 0, "nomenclature_errors": 0, "has_report": 0}
         summary = self._compute_drift_summary(db, report.id)
         return {
             "total": summary.total,
             "upgrades": summary.upgrades,
             "downgrades": summary.downgrades,
             "missing": summary.missing,
+            "nomenclature_errors": summary.nomenclature_errors,
             "has_report": 1,
         }

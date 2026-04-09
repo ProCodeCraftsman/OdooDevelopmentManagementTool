@@ -63,6 +63,7 @@ export interface DashboardDriftResponse {
   upgrades: number;
   downgrades: number;
   missing: number;
+  nomenclature_errors: number;
   has_report: boolean;
 }
 

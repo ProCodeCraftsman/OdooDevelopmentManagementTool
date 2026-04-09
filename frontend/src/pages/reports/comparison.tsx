@@ -184,10 +184,16 @@ function DriftSummaryCards({ summary }: { summary?: DriftSummaryCounts }) {
       className: "text-yellow-600",
       bg: "border-yellow-200 bg-yellow-50/40 dark:bg-yellow-950/20",
     },
+    {
+      label: "Nomenclature Errors",
+      value: summary?.nomenclature_errors ?? 0,
+      className: "text-orange-600",
+      bg: "border-orange-200 bg-orange-50/40 dark:bg-orange-950/20",
+    },
   ];
 
   return (
-    <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+    <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
       {cards.map((c) => (
         <Card key={c.label} className={c.bg}>
           <CardContent className="pt-4 pb-3">

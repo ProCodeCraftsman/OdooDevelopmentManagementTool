@@ -68,6 +68,7 @@ class DashboardDriftResponse(BaseModel):
     upgrades: int
     downgrades: int
     missing: int
+    nomenclature_errors: int
     has_report: bool  # False if no report has been generated yet
 
 

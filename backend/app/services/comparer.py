@@ -61,20 +61,20 @@ def calculate_drift_action(
 
     Action strings (categorical):
         "Upgrade", "Error (Downgrade)", "No Action",
-        "Missing Module", "Error (Missing in Source)"
-    missing_env: the specific env name that is missing (hybrid field), or None.
+        "Missing Module", "Error (Missing in Source)", "Error (Version Structure Mismatch)"
+    mismatch_reason: the specific mismatch reason (e.g., "dot_count_mismatch"), or None.
     """
     src_is_na = not source_version or source_version.strip() in INVALID_VERSIONS
     dst_is_na = not dest_version or dest_version.strip() in INVALID_VERSIONS
 
     if src_is_na:
-        return "Error (Missing in Source)", source_env_name
+        return "Error (Missing in Source)", None
 
     if dst_is_na:
-        return "Missing Module", dest_env_name
+        return "Missing Module", None
 
-    action = calculate_release_action(source_version, dest_version)
-    return action, None
+    action, mismatch_reason = calculate_release_action(source_version, dest_version)
+    return action, mismatch_reason
 
 
 def parse_version_components(version_string: str) -> dict:
@@ -114,36 +114,49 @@ def compare_versions(source: str, target: str) -> int:
     return _compare_tuples(s_ver, t_ver)
 
 
-def calculate_release_action(source_version: str, target_version: str) -> str:
+def calculate_release_action(source_version: str, target_version: str) -> Tuple[str, Optional[str]]:
     """Calculate release action based on version comparison.
     
     Directional Release Logic:
     Source = Higher Order (e.g., Dev=4) | Target = Lower Order (e.g., Staging=3)
+    Source version should be HIGHER than target - meaning target needs to upgrade to match source.
     
     Args:
         source_version: Version from higher-order environment
         target_version: Version from lower-order environment
         
     Returns:
-        Action string: "Upgrade", "No Action", "Error (Downgrade)", "Missing Module", etc.
+        Tuple of (action_string, mismatch_reason):
+        - ("Upgrade", None) - target needs to upgrade to match source
+        - ("No Action", None) - versions are equal
+        - ("Error (Downgrade)", None) - target version is higher than source (regression)
+        - ("Error (Version Structure Mismatch)", "dot_count_mismatch") - version structures differ
+        - ("Missing Module", None) - target doesn't have module
+        - ("Error (Missing in Source)", None) - source doesn't have module
     """
     s_ver = parse_semver(source_version)
     t_ver = parse_semver(target_version)
     
     if s_ver is None and t_ver is not None:
-        return "Error (Missing in Source)"
-    
-    if t_ver is None:
-        return "Missing Module"
+        return "Error (Missing in Source)", None
     
     if s_ver is None and t_ver is None:
-        return "No Action"
+        return "No Action", None
+    
+    if t_ver is None:
+        return "Missing Module", None
+    
+    if s_ver is None and t_ver is None:
+        return "No Action", None
+    
+    if len(s_ver) != len(t_ver):
+        return "Error (Version Structure Mismatch)", "dot_count_mismatch"
     
     comparison = _compare_tuples(s_ver, t_ver)
     
-    if comparison < 0:
-        return "Upgrade"
-    elif comparison > 0:
-        return "Error (Downgrade)"
+    if comparison > 0:
+        return "Upgrade", None
+    elif comparison < 0:
+        return "Error (Downgrade)", None
     else:
-        return "No Action"
+        return "No Action", None

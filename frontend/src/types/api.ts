@@ -220,6 +220,7 @@ export interface DriftSummaryCounts {
   upgrades: number;
   downgrades: number;
   missing: number;
+  nomenclature_errors: number;
 }
 
 export interface PaginatedDriftResponse {

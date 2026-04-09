@@ -82,6 +82,7 @@ def _build_sliding_window_drift(
         "Missing Module": 0,
         "Error (Missing in Source)": 0,
         "No Action": 0,
+        "Error (Version Structure Mismatch)": 0,
     }
 
     for i in range(len(env_names) - 1):
@@ -98,7 +99,7 @@ def _build_sliding_window_drift(
         if src_is_na and dst_is_na:
             continue
 
-        action, missing_env = calculate_drift_action(src_ver, dst_ver, src_env, dst_env)
+        action, mismatch_reason = calculate_drift_action(src_ver, dst_ver, src_env, dst_env)
         action_counts[action] = action_counts.get(action, 0) + 1
 
         drift_entries.append({
@@ -109,7 +110,7 @@ def _build_sliding_window_drift(
             "dest_env": dst_env,
             "dest_version": None if dst_is_na else dst_ver,
             "action": action,
-            "missing_env": missing_env,
+            "mismatch_reason": mismatch_reason,
         })
 
     return drift_entries, action_counts

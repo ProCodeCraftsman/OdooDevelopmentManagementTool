@@ -461,8 +461,8 @@ function VersionDriftTab() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : !data?.has_report ? (
         <Card>
@@ -478,7 +478,7 @@ function VersionDriftTab() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {/* Total Drifts */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -524,6 +524,18 @@ function VersionDriftTab() {
             <CardContent>
               <div className="text-3xl font-bold text-yellow-600">{data.missing}</div>
               <p className="text-xs text-muted-foreground mt-1">Not in one env</p>
+            </CardContent>
+          </Card>
+
+          {/* Nomenclature Errors */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Nomenclature Errors</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-orange-600">{data.nomenclature_errors}</div>
+              <p className="text-xs text-muted-foreground mt-1">Version structure mismatch</p>
             </CardContent>
           </Card>
         </div>

@@ -360,12 +360,14 @@ def get_version_drift(db: Session) -> DashboardDriftResponse:
     upgrades = counts.get("Upgrade", 0)
     downgrades = counts.get("Error (Downgrade)", 0)
     missing = counts.get("Missing Module", 0) + counts.get("Error (Missing in Source)", 0)
+    nomenclature_errors = counts.get("Error (Version Structure Mismatch)", 0)
 
     return DashboardDriftResponse(
         total_drifts=total,
         upgrades=upgrades,
         downgrades=downgrades,
         missing=missing,
+        nomenclature_errors=nomenclature_errors,
         has_report=True,
     )
 

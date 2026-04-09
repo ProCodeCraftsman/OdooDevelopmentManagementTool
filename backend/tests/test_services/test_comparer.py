@@ -98,28 +98,52 @@ class TestCompareVersions:
 
 class TestCalculateReleaseAction:
     def test_upgrade_needed(self):
-        assert calculate_release_action("17.0.1.10", "17.0.1.9") == "Upgrade"
+        action, _ = calculate_release_action("17.0.1.10", "17.0.1.9")
+        assert action == "Upgrade"
 
     def test_no_action_when_equal(self):
-        assert calculate_release_action("17.0.1.10", "17.0.1.10") == "No Action"
+        action, _ = calculate_release_action("17.0.1.10", "17.0.1.10")
+        assert action == "No Action"
 
     def test_downgrade_error(self):
-        assert calculate_release_action("17.0.1.9", "17.0.1.10") == "Error (Downgrade)"
+        action, _ = calculate_release_action("17.0.1.9", "17.0.1.10")
+        assert action == "Error (Downgrade)"
 
     def test_missing_in_target(self):
-        assert calculate_release_action("17.0.1.10", "N/A") == "Missing Module"
+        action, _ = calculate_release_action("17.0.1.10", "N/A")
+        assert action == "Missing Module"
 
     def test_missing_in_source(self):
-        assert calculate_release_action("N/A", "17.0.1.10") == "Error (Missing in Source)"
+        action, _ = calculate_release_action("N/A", "17.0.1.10")
+        assert action == "Error (Missing in Source)"
 
     def test_both_missing(self):
-        assert calculate_release_action("N/A", "N/A") == "Missing Module"
+        action, _ = calculate_release_action("N/A", "N/A")
+        assert action == "No Action"
+
+    def test_version_structure_mismatch(self):
+        action, reason = calculate_release_action("17.0.1.9.2", "17.0.1.9")
+        assert action == "Error (Version Structure Mismatch)"
+        assert reason == "dot_count_mismatch"
+
+    def test_version_structure_mismatch_reversed(self):
+        action, reason = calculate_release_action("17.0.1.9", "17.0.1.9.2")
+        assert action == "Error (Version Structure Mismatch)"
+        assert reason == "dot_count_mismatch"
+
+    def test_version_structure_mismatch_different_lengths(self):
+        action, reason = calculate_release_action("17.0.1", "17.0.1.0.0")
+        assert action == "Error (Version Structure Mismatch)"
+        assert reason == "dot_count_mismatch"
 
     def test_missing_module_string(self):
-        assert calculate_release_action("17.0.1.10", "Missing Module") == "Missing Module"
+        action, _ = calculate_release_action("17.0.1.10", "Missing Module")
+        assert action == "Missing Module"
 
     def test_significant_upgrade(self):
-        assert calculate_release_action("18.0.0.0", "17.0.0.0") == "Upgrade"
+        action, _ = calculate_release_action("18.0.0.0", "17.0.0.0")
+        assert action == "Upgrade"
 
     def test_minor_upgrade(self):
-        assert calculate_release_action("17.1.0.0", "17.0.0.0") == "Upgrade"
+        action, _ = calculate_release_action("17.1.0.0", "17.0.0.0")
+        assert action == "Upgrade"

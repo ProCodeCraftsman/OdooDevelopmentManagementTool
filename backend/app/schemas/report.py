@@ -56,6 +56,7 @@ class VersionDriftEntryResponse(BaseModel):
     dest_version: Optional[str]
     action: str
     missing_env: Optional[str]
+    mismatch_reason: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -66,6 +67,7 @@ class DriftSummaryCounts(BaseModel):
     upgrades: int
     downgrades: int
     missing: int
+    nomenclature_errors: int = 0
 
 
 class PaginatedDriftResponse(BaseModel):

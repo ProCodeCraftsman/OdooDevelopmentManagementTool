@@ -69,10 +69,12 @@ class VersionDriftEntry(Base):
     source_version: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     dest_env: Mapped[str] = mapped_column(String(255))
     dest_version: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    # Categorical: "Upgrade" | "Error (Downgrade)" | "No Action" | "Missing Module" | "Error (Missing in Source)"
+    # Categorical: "Upgrade" | "Error (Downgrade)" | "No Action" | "Missing Module" | "Error (Missing in Source)" | "Error (Version Structure Mismatch)"
     action: Mapped[str] = mapped_column(String(255), index=True)
     # Hybrid field: which specific env name is missing (for UI display), null if not applicable
     missing_env: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Reason for version structure mismatch (e.g., "dot_count_mismatch"), null if not applicable
+    mismatch_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     report: Mapped["ComparisonReport"] = relationship(back_populates="drift_entries")
 
