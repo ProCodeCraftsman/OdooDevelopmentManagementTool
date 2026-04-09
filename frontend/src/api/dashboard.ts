@@ -66,6 +66,41 @@ export interface DashboardDriftResponse {
   has_report: boolean;
 }
 
+export interface PriorityBreakdownItem {
+  name: string;
+  count: number;
+}
+
+export interface RadarDataPoint {
+  category: string;
+  value: number;
+  priority_breakdown: PriorityBreakdownItem[];
+}
+
+export interface RadarChartData {
+  name: string;
+  color: string;
+  data: RadarDataPoint[];
+}
+
+export interface FunctionalCategoryItem {
+  id: number;
+  name: string;
+}
+
+export interface PriorityItem {
+  id: number;
+  name: string;
+  level: number;
+}
+
+export interface RequestAnalysisResponse {
+  macro_state_chart: RadarChartData[];
+  priority_chart: RadarChartData[];
+  functional_categories: FunctionalCategoryItem[];
+  priorities: PriorityItem[];
+}
+
 // ─── API calls ────────────────────────────────────────────────────────────────
 
 export const dashboardApi = {
@@ -74,4 +109,11 @@ export const dashboardApi = {
 
   getVersionDrift: (): Promise<DashboardDriftResponse> =>
     api.get("/dashboard/version-drift").then((r) => r.data),
+
+  getRequestAnalysis: (categoryIds?: number[]): Promise<RequestAnalysisResponse> => {
+    const params = categoryIds?.length
+      ? { category_ids: categoryIds.join(",") }
+      : {};
+    return api.get("/dashboard/request-analysis", { params }).then((r) => r.data);
+  },
 };

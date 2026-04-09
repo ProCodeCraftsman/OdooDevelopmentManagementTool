@@ -21,9 +21,15 @@ from app.schemas.dashboard import (
     DashboardDriftResponse,
     DashboardSummaryResponse,
     DevVelocityKPI,
+    FunctionalCategoryItem,
     InfraHealthKPI,
     PipelineDistributionItem,
+    PriorityBreakdownItem,
+    PriorityItem,
+    RadarChartData,
+    RadarDataPoint,
     ReleasePipelineKPI,
+    RequestAnalysisResponse,
     UATActivityItem,
     UpcomingDeployment,
     UrgentDriftKPI,
@@ -361,4 +367,141 @@ def get_version_drift(db: Session) -> DashboardDriftResponse:
         downgrades=downgrades,
         missing=missing,
         has_report=True,
+    )
+
+
+# ─── Request Analysis (Tab 3) ──────────────────────────────────────────────────
+
+MACRO_STATE_COLORS: dict[str, str] = {
+    "Draft": "#94a3b8",
+    "In Progress": "#3b82f6",
+    "Ready": "#06b6d4",
+    "Done": "#22c55e",
+}
+
+PRIORITY_COLORS: dict[str, str] = {
+    "Critical": "#ef4444",
+    "High": "#f97316",
+    "Medium": "#eab308",
+    "Low": "#22c55e",
+}
+
+MACRO_STATES_ORDER = ["Draft", "In Progress", "Ready", "Done"]
+
+PRIORITIES_ORDER = ["Critical", "High", "Medium", "Low"]
+
+
+def get_request_analysis(
+    db: Session, category_ids: list[int] | None = None
+) -> RequestAnalysisResponse:
+    from app.models.control_parameters import (
+        FunctionalCategory,
+        Priority,
+        RequestState,
+        RequestType,
+    )
+
+    all_categories_query = db.query(FunctionalCategory).filter(FunctionalCategory.is_active.is_(True))
+    if category_ids:
+        all_categories_query = all_categories_query.filter(FunctionalCategory.id.in_(category_ids))
+    all_categories = all_categories_query.order_by(FunctionalCategory.display_order.asc()).all()
+    categories = [c.name for c in all_categories]
+
+    base_query = (
+        db.query(DevelopmentRequest)
+        .join(RequestType, DevelopmentRequest.request_type_id == RequestType.id)
+        .join(RequestState, DevelopmentRequest.request_state_id == RequestState.id)
+        .join(Priority, DevelopmentRequest.priority_id == Priority.id)
+        .join(FunctionalCategory, DevelopmentRequest.functional_category_id == FunctionalCategory.id)
+        .filter(
+            RequestType.category == "Development",
+            DevelopmentRequest.is_archived.is_(False),
+            RequestState.category.in_(MACRO_STATES_ORDER),
+        )
+    )
+
+    if category_ids:
+        base_query = base_query.filter(FunctionalCategory.id.in_(category_ids))
+
+    rows = (
+        base_query.with_entities(
+            FunctionalCategory.name.label("category"),
+            RequestState.category.label("macro_state"),
+            Priority.name.label("priority"),
+            func.count(DevelopmentRequest.id).label("count"),
+        )
+        .group_by(
+            FunctionalCategory.name,
+            RequestState.category,
+            Priority.name,
+        )
+        .all()
+    )
+
+    priorities = (
+        db.query(Priority)
+        .filter(Priority.is_active.is_(True))
+        .order_by(Priority.level.asc())
+        .all()
+    )
+    priority_names = [p.name for p in priorities]
+
+    macro_state_data: dict[str, dict[str, dict[str, int]]] = {
+        ms: {cat: {} for cat in categories} for ms in MACRO_STATES_ORDER
+    }
+    priority_data: dict[str, dict[str, dict[str, int]]] = {
+        p: {cat: {} for cat in categories} for p in PRIORITIES_ORDER
+    }
+
+    for row in rows:
+        macro_state_data[row.macro_state][row.category][row.priority] = row.count
+        priority_data[row.priority][row.category][row.priority] = row.count
+
+    def build_priority_breakdown(breakdown_dict: dict[str, int]) -> list[PriorityBreakdownItem]:
+        return [
+            PriorityBreakdownItem(name=p_name, count=breakdown_dict.get(p_name, 0))
+            for p_name in priority_names
+        ]
+
+    def build_chart_series(
+        series_dict: dict[str, dict[str, dict[str, int]]],
+        colors: dict[str, str],
+    ) -> list[RadarChartData]:
+        result = []
+        for name, cat_data in series_dict.items():
+            if name not in colors:
+                continue
+            data_points = [
+                RadarDataPoint(
+                    category=cat,
+                    value=sum(breakdown.values()),
+                    priority_breakdown=build_priority_breakdown(breakdown),
+                )
+                for cat, breakdown in sorted(cat_data.items())
+            ]
+            result.append(RadarChartData(
+                name=name,
+                color=colors[name],
+                data=data_points,
+            ))
+        return result
+
+    macro_state_chart = build_chart_series(macro_state_data, MACRO_STATE_COLORS)
+    priority_chart = build_chart_series(priority_data, PRIORITY_COLORS)
+
+    functional_category_items = [
+        FunctionalCategoryItem(id=c.id, name=c.name)
+        for c in all_categories
+    ]
+
+    priority_items = [
+        PriorityItem(id=p.id, name=p.name, level=p.level)
+        for p in priorities
+    ]
+
+    return RequestAnalysisResponse(
+        macro_state_chart=macro_state_chart,
+        priority_chart=priority_chart,
+        functional_categories=functional_category_items,
+        priorities=priority_items,
     )

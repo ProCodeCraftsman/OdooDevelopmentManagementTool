@@ -114,7 +114,9 @@ class DevelopmentRequestService:
     # Validation helpers
     # ------------------------------------------------------------------
 
-    def validate_intra_parameter_rules(self, data: dict, is_update: bool = False) -> None:
+    def validate_intra_parameter_rules(
+        self, data: dict, is_update: bool = False, from_draft: bool = False
+    ) -> None:
         request_type_id = data.get("request_type_id")
         if not request_type_id and is_update:
             return
@@ -129,11 +131,13 @@ class DevelopmentRequestService:
         if request_type.category == "Development":
             assigned_dev_id = data.get("assigned_developer_id")
             if not assigned_dev_id:
-                if not is_update:
+                if from_draft:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Assigned Developer is required for Development type requests",
+                        detail="Assigned Developer is required to transition Development type requests from Draft to another state",
                     )
+                if not is_update:
+                    pass
 
         request_state_id = data.get("request_state_id")
         if request_state_id:
@@ -236,11 +240,15 @@ class DevelopmentRequestService:
                         detail="Target request type not found",
                     )
                 self._validate_state_type_rule(request_type, new_state)
+
+                is_from_draft = current.request_state.category == StateCategory.DRAFT
+                new_assigned_dev_id = allowed_data.get("assigned_developer_id", current.assigned_developer_id)
                 validate_data = {
                     "request_type_id": request_type.id,
                     "request_state_id": new_state.id,
+                    "assigned_developer_id": new_assigned_dev_id,
                 }
-                self.validate_intra_parameter_rules(validate_data, is_update=True)
+                self.validate_intra_parameter_rules(validate_data, is_update=True, from_draft=is_from_draft)
 
                 if new_state.category == StateCategory.DONE:
                     if request_type.category == "Development":

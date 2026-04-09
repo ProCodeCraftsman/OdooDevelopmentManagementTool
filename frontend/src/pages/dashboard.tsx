@@ -38,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { RequestAnalysisTab } from "@/components/dashboard/request-analysis-tab";
 import { useDashboardSummary, useVersionDrift } from "@/hooks/useDashboard";
 import { cn } from "@/lib/utils";
 
@@ -547,6 +548,7 @@ export function DashboardPage() {
         <TabsList>
           <TabsTrigger value="command-center">Command Center</TabsTrigger>
           <TabsTrigger value="version-drift">Version Drift</TabsTrigger>
+          <TabsTrigger value="request-analysis">Request Analysis</TabsTrigger>
         </TabsList>
 
         <TabsContent value="command-center" className="mt-6">
@@ -555,6 +557,10 @@ export function DashboardPage() {
 
         <TabsContent value="version-drift" className="mt-6">
           <VersionDriftTab />
+        </TabsContent>
+
+        <TabsContent value="request-analysis" className="mt-6">
+          <RequestAnalysisTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,38 +1,44 @@
-# Dashboards
+# Dashboards & Analytics
 
-The Dashboard provides a centralized view of development activity, release progress, and infrastructure health.
+The dashboard provides a high-level overview of the system's health, development velocity, and release progress.
 
-## Core Metrics and KPIs
+## KPI Modules
 
 ### Development Velocity
-- **Active Requests:** Count of Development Requests currently in Draft, In Progress, or Ready states.
-- **Completion Percentage:** Calculated as `Closed Requests / Total Requests`.
+Tracks the speed at which development requests are moving through the pipeline.
+- **Cycle Time:** Average time taken from "In Progress" to "Ready".
+- **Lead Time:** Average time from "Draft" to "Done".
+- **Throughput:** Number of requests closed in a given period.
 
 ### Release Pipeline
-- **Active Plans:** Total count of Release Plans in non-terminal states (Draft, Planned, Approved, Executing).
-- **Next Deployment:** The earliest `planned_deployment_date` among all active release plans.
+Provides visibility into the status of active and historical release plans.
+- **Success Rate:** Percentage of releases that closed successfully vs. those that failed.
+- **Deployment Frequency:** How often releases are being pushed to production.
+- **Open Releases:** Count of releases in Draft, Planned, or Executed states.
 
 ### Infrastructure Health
-- **Active Environments:** Total count of environments currently marked as active.
-- **Synced Last 24h:** Count of unique environments that have successfully completed a sync within the last 24 hours.
-- **Pending Actions:** Count of version drift entries that require attention (excluding "No Action").
+Monitors the connectivity and status of Odoo environments.
+- **Environment Status:** Real-time indicator of whether the XML-RPC connection is active for each environment.
+- **Sync History:** Log of recent module sync operations, including errors and durations.
 
-## Aggregated Reports
+### Workload Matrix
+Analyzes the distribution of development tasks across the team.
+- **Assigned per Developer:** Heatmap of open DRs assigned to each developer.
+- **Functional Area Split:** Breakdown of requests by functional category (e.g., 40% Sales, 30% Inventory).
 
-### Developer Workload Matrix
-A matrix displaying the distribution of requests (Draft, In Progress, Ready, Done) across assigned developers. This helps identify bottlenecks or unassigned tasks.
+## Saved Views & Customization
 
-### Pipeline Distribution
-A summary chart showing the number of requests in each category (Draft, In Progress, Ready, Done) to visualize the flow of the development pipeline.
+Users can customize their experience by creating and managing **Saved Views**.
 
-### Upcoming Deployments
-A prioritized list of the next 5 scheduled release plans, showing their target environments and planned deployment dates.
+- **Creation:** Users can apply filters (e.g., by developer, state, or functional category), search terms, and grouping options to a list view and save it for future use.
+- **Public vs. Private:** Views can be marked as "Public" to be shared with the team or kept private for individual use.
+- **Persisted State:** Each saved view stores the exact query state, including applied filters, search terms, and whether archived records are shown.
+- **Management:** Users can easily switch between views, update existing ones, or delete those that are no longer needed.
 
-### UAT Activity
-A summary of the current status of all module-level User Acceptance Tests (e.g., Open, In Progress, Not Set).
+## Data Aggregation
 
-### Version Drift Summary
-A card-based summary highlighting the total number of identified drifts, categorized by:
-- **Upgrades:** Modules ready for promotion.
-- **Downgrades/Errors:** Potential version conflicts.
-- **Missing:** Modules that are absent in a target environment but present in the source.
+The dashboard service aggregates data from several core models:
+- **`DevelopmentRequest`:** For velocity and workload metrics.
+- **`ReleasePlan`:** For pipeline success rates.
+- **`SyncRecord`:** For infrastructure health and environment sync history.
+- **`ComparisonReport`:** To highlight critical version drifts across the infrastructure.

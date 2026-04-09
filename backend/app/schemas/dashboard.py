@@ -69,3 +69,40 @@ class DashboardDriftResponse(BaseModel):
     downgrades: int
     missing: int
     has_report: bool  # False if no report has been generated yet
+
+
+# ─── Tab 3: Request Analysis (Radar Charts) ──────────────────────────────────
+
+class PriorityBreakdownItem(BaseModel):
+    name: str
+    count: int
+
+
+class RadarDataPoint(BaseModel):
+    category: str
+    value: int
+    priority_breakdown: list[PriorityBreakdownItem]
+
+
+class RadarChartData(BaseModel):
+    name: str
+    color: str
+    data: list[RadarDataPoint]
+
+
+class FunctionalCategoryItem(BaseModel):
+    id: int
+    name: str
+
+
+class PriorityItem(BaseModel):
+    id: int
+    name: str
+    level: int
+
+
+class RequestAnalysisResponse(BaseModel):
+    macro_state_chart: list[RadarChartData]
+    priority_chart: list[RadarChartData]
+    functional_categories: list[FunctionalCategoryItem]
+    priorities: list[PriorityItem]

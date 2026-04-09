@@ -68,6 +68,8 @@ The current codebase centers on these persisted entities:
 - `SyncRecord`: latest synced module state/version per environment.
 - `ModuleDependency`: dependency records captured during sync.
 - `DevelopmentRequest`: request header, ownership, state, priority, hierarchy, and archive status.
+- `DevelopmentRequestStateTypeRule`: constraints on request states based on request type.
+- `ControlParameterRule`: generic rule engine for constraining parameters by state.
 - `RequestModuleLine`: module/version/UAT details linked to a development request.
 - `RequestComment` and `RequestAttachment`: threaded collaboration artifacts on requests.
 - `SavedView`: persisted JSONB query state for request list views.

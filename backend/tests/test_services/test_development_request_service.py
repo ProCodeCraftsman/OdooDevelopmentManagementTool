@@ -65,18 +65,27 @@ class TestIntraParameterValidation:
             {"request_type_id": 1, "request_state_id": 6}
         )
 
-    def test_development_type_requires_developer_assignment(self):
+    def test_development_type_requires_developer_assignment_from_draft(self):
         service = DevelopmentRequestService(MagicMock())
         service.request_type_repo = MagicMock()
         service.request_type_repo.get.return_value = MockRequestType(1, "Development")
 
         with pytest.raises(HTTPException) as exc_info:
-            service.validate_intra_parameter_rules({"request_type_id": 1})
+            service.validate_intra_parameter_rules(
+                {"request_type_id": 1}, is_update=True, from_draft=True
+            )
 
         assert exc_info.value.status_code == 400
         assert "Assigned Developer is required" in str(exc_info.value.detail)
 
-    def test_development_type_allows_with_developer_assignment(self):
+    def test_development_type_allows_unassigned_on_create(self):
+        service = DevelopmentRequestService(MagicMock())
+        service.request_type_repo = MagicMock()
+        service.request_type_repo.get.return_value = MockRequestType(1, "Development")
+
+        service.validate_intra_parameter_rules({"request_type_id": 1})
+
+    def test_development_type_allows_with_developer_assignment_from_draft(self):
         service = DevelopmentRequestService(MagicMock())
         service.request_type_repo = MagicMock()
         service.request_type_repo.get.return_value = MockRequestType(1, "Development")
@@ -87,7 +96,9 @@ class TestIntraParameterValidation:
         service.rule_repo.is_allowed.return_value = True
 
         service.validate_intra_parameter_rules(
-            {"request_type_id": 1, "request_state_id": 1, "assigned_developer_id": 5}
+            {"request_type_id": 1, "request_state_id": 1, "assigned_developer_id": 5},
+            is_update=True,
+            from_draft=True,
         )
 
     def test_development_type_raises_for_invalid_request_type(self):

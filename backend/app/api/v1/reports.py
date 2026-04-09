@@ -149,7 +149,6 @@ def generate_report(
 
         modules = db.query(Module).all()
         env_names = [env.name for env in environments]
-        print(f"DEBUG: environments = {[(env.name, env.order) for env in environments]}")
 
         # Create new parent report (CASCADE-deletes all old rows + drift entries)
         report = _repo.create_new_report(db)
