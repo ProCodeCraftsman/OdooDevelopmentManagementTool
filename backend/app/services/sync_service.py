@@ -44,7 +44,7 @@ class SyncService:
             "completed_at": job.completed_at.isoformat() if job.completed_at else None,
         }
 
-    SYNC_TIMEOUT_SECONDS = 60
+    SYNC_TIMEOUT_SECONDS = 120
 
     def execute_sync(self, job_id: uuid.UUID) -> bool:  # noqa: C901
         """Fetch module data from Odoo and persist it atomically.
@@ -113,7 +113,7 @@ class SyncService:
                     db_mod = Module(name=module_data.name, shortdesc=module_data.shortdesc)
                     self.db.add(db_mod)
                     module_cache[module_data.name] = db_mod
-                elif module_data.shortdesc and db_mod.shortdesc != module_data.shortdesc:
+                elif db_mod.shortdesc != module_data.shortdesc:
                     db_mod.shortdesc = module_data.shortdesc
 
             # Flush assigns PKs to new Module rows without committing

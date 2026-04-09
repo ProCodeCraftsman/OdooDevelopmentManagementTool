@@ -104,13 +104,13 @@ def seed_control_parameters(force: bool = False):
 
         request_states = [
             RequestState(
-                name="Draft - Under Review",
+                name="Under Review",
                 category="Draft",
                 description="Request is under initial review",
                 display_order=1,
             ),
             RequestState(
-                name="Draft - Accepted On Hold",
+                name="Accepted On Hold",
                 category="Draft",
                 description="Request is accepted but currently on hold",
                 display_order=2,
@@ -128,13 +128,13 @@ def seed_control_parameters(force: bool = False):
                 display_order=4,
             ),
             RequestState(
-                name="Ready - QA Signoff",
+                name="Developed",
                 category="Ready",
                 description="Implementation is complete and waiting for QA or technical signoff",
                 display_order=5,
             ),
             RequestState(
-                name="Ready - Business Validation",
+                name="Ready - Fubctional UAT",
                 category="Ready",
                 description="Implementation is complete and waiting for business confirmation",
                 display_order=6,
@@ -158,7 +158,7 @@ def seed_control_parameters(force: bool = False):
                 display_order=9,
             ),
             RequestState(
-                name="Cancelled - Rejected",
+                name="Rejected",
                 category="Cancelled",
                 description="Request was rejected during review or execution",
                 display_order=10,
