@@ -14,6 +14,7 @@ import { SettingsUsersPage } from "@/pages/settings/users";
 import { SettingsControlParametersPage } from "@/pages/settings/control-parameters";
 import { MainLayout } from "@/components/layout/main-layout";
 import { DevelopmentRequestsListPage } from "@/pages/development-requests/list";
+import { DevelopmentRequestLinesPage } from "@/pages/development-requests/lines-list";
 import { DevelopmentRequestsDetailPage } from "@/pages/development-requests/detail";
 import { DevelopmentRequestsFormPage } from "@/pages/development-requests/form";
 import { ReleasePlansListPage } from "@/pages/release-plans/list";
@@ -54,6 +55,7 @@ function App() {
           <Route path="environments/:name" element={<EnvironmentDetailPage />} />
           <Route path="reports/comparison" element={<ComparisonPage />} />
           <Route path="development-requests" element={<DevelopmentRequestsListPage />} />
+          <Route path="development-requests/lines" element={<DevelopmentRequestLinesPage />} />
           <Route path="development-requests/new" element={<DevelopmentRequestsFormPage />} />
           <Route path="development-requests/:id" element={<DevelopmentRequestsDetailPage />} />
           <Route path="release-plans" element={<ReleasePlansListPage />} />

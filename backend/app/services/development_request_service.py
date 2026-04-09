@@ -495,6 +495,39 @@ class DevelopmentRequestService:
     # Module lines
     # ------------------------------------------------------------------
 
+    def get_module_lines(
+        self,
+        module_names: Optional[List[str]] = None,
+        uat_statuses: Optional[List[str]] = None,
+        skip: int = 0,
+        limit: int = 20,
+        search: Optional[str] = None,
+        group_by: Optional[str] = None,
+    ) -> Tuple[List[RequestModuleLine], int, Optional[List[Dict]]]:
+        return self.module_line_repo.get_all_with_filters(
+            module_names=module_names,
+            uat_statuses=uat_statuses,
+            skip=skip,
+            limit=limit,
+            search=search,
+            group_by=group_by,
+        )
+
+    def get_module_lines_ids(
+        self,
+        module_names: Optional[List[str]] = None,
+        uat_statuses: Optional[List[str]] = None,
+        search: Optional[str] = None,
+    ) -> List[int]:
+        return self.module_line_repo.get_all_ids_with_filters(
+            module_names=module_names,
+            uat_statuses=uat_statuses,
+            search=search,
+        )
+
+    def get_module_lines_by_ids(self, ids: List[int]) -> List[RequestModuleLine]:
+        return self.module_line_repo.get_by_ids(ids)
+
     def add_module_line(self, user: User, request_id: int, data: dict) -> RequestModuleLine:
         current = self.repo.get_with_relations(request_id)
         if not current:

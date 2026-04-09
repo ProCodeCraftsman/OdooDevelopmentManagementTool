@@ -110,6 +110,25 @@ export interface RequestModuleLine {
   updated_at: string | null;
 }
 
+export interface DevelopmentRequestBrief {
+  id: number;
+  request_number: string;
+  title: string;
+  request_state_id: number;
+  request_state: RequestStateBrief;
+}
+
+export interface RequestModuleLineWithRequest extends RequestModuleLine {
+  request: DevelopmentRequestBrief;
+}
+
+export interface DevelopmentRequestLineFilters {
+  module_names?: string;
+  uat_statuses?: string;
+  search?: string;
+  group_by?: "module" | "uat_status";
+}
+
 export interface RequestReleasePlanLine {
   id: number;
   request_id: number;
@@ -386,6 +405,64 @@ export interface ControlParameters {
 // ---------------------------------------------------------------------------
 
 export const developmentRequestsApi = {
+  // ── DR Lines Global List ──────────────────────────────────────────────────
+  getLines: async (
+    filters?: DevelopmentRequestLineFilters,
+    page = 1,
+    limit = 20
+  ): Promise<PaginatedResponse<RequestModuleLineWithRequest>> => {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("limit", limit.toString());
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, value.toString());
+        }
+      });
+    }
+    const response = await api.get<PaginatedResponse<RequestModuleLineWithRequest>>(
+      `/development-requests/lines/all?${params.toString()}`
+    );
+    return response.data;
+  },
+
+  getLinesIds: async (filters?: DevelopmentRequestLineFilters): Promise<{ ids: number[] }> => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, value.toString());
+        }
+      });
+    }
+    const response = await api.get<{ ids: number[] }>(
+      `/development-requests/lines/all-ids?${params.toString()}`
+    );
+    return response.data;
+  },
+
+  exportLinesXlsx: async (
+    filters?: DevelopmentRequestLineFilters,
+    filename?: string,
+    selectedIds?: number[]
+  ): Promise<void> => {
+    const params = new URLSearchParams();
+    if (selectedIds && selectedIds.length > 0) {
+      params.append("ids", selectedIds.join(","));
+    } else if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          params.append(key, value.toString());
+        }
+      });
+    }
+    const qs = params.toString();
+    const url = `${API_BASE_URL}/development-requests/lines/export${qs ? `?${qs}` : ""}`;
+    const rows = await _fetchExport(url);
+    _downloadXlsx(rows, "DR Lines", filename ?? "dr_lines.xlsx");
+  },
+
   // ── All IDs (for "select all N records" bulk selection) ──────────────────
   getAllIds: async (filters?: DevelopmentRequestFilters): Promise<{ ids: number[]; total: number }> => {
     const params = new URLSearchParams();

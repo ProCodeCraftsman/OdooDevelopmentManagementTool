@@ -101,6 +101,29 @@ class RequestModuleLineResponse(RequestModuleLineBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DevelopmentRequestBrief(BaseModel):
+    id: int
+    request_number: str
+    title: str
+    request_state_id: int
+    request_state: RequestStateBrief
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RequestModuleLineWithRequest(RequestModuleLineResponse):
+    request: DevelopmentRequestBrief
+
+
+class PaginatedRequestModuleLineResponse(BaseModel):
+    items: List[RequestModuleLineWithRequest]
+    total: int
+    page: int
+    limit: int
+    pages: int
+    groups: Optional[List[GroupInfo]] = None
+
+
 class BulkModuleLineCreate(BaseModel):
     lines: List[RequestModuleLineCreate]
 

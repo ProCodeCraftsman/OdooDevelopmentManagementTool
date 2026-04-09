@@ -52,6 +52,8 @@ from app.schemas.development_request import (
     RequestModuleLineCreate,
     RequestModuleLineUpdate,
     RequestModuleLineResponse,
+    RequestModuleLineWithRequest,
+    PaginatedRequestModuleLineResponse,
     BulkModuleLineCreate,
     BulkModuleLineResponse,
     RequestCommentCreate,
@@ -411,6 +413,109 @@ def get_linked_release_plans(
     service = ReleasePlanService(db)
     results = service.get_linked_plans_for_dr(request_id)
     return [LinkedReleasePlanEntry(**r) for r in results]
+
+
+# ---------------------------------------------------------------------------
+# Global DR Lines (standalone tab view)
+# ---------------------------------------------------------------------------
+
+@router.get("/lines/all", response_model=PaginatedRequestModuleLineResponse)
+def get_all_module_lines(
+    module_names: Optional[str] = Query(None),
+    uat_statuses: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    group_by: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    skip = (page - 1) * limit
+    items, total, groups = DevelopmentRequestService(db).get_module_lines(
+        module_names=_parse_csv(module_names),
+        uat_statuses=_parse_csv(uat_statuses),
+        skip=skip,
+        limit=limit,
+        search=search,
+        group_by=group_by,
+    )
+    pages = (total + limit - 1) // limit
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+        "groups": groups,
+    }
+
+
+@router.get("/lines/all-ids")
+def get_all_module_line_ids(
+    module_names: Optional[str] = Query(None),
+    uat_statuses: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ids = DevelopmentRequestService(db).get_module_lines_ids(
+        module_names=_parse_csv(module_names),
+        uat_statuses=_parse_csv(uat_statuses),
+        search=search,
+    )
+    return {"ids": ids}
+
+
+@router.get("/lines/export")
+def export_module_lines(
+    module_names: Optional[str] = Query(None),
+    uat_statuses: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    ids: Optional[str] = Query(
+        None,
+        description="Comma-separated line IDs. When provided, exports only these records.",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    """
+    Export lines as a flat JSON array for Excel generation.
+    Includes metadata and IDs for selective export support.
+    """
+    service = DevelopmentRequestService(db)
+    explicit_ids = _parse_csv(ids)
+
+    if explicit_ids:
+        int_ids = [int(i) for i in explicit_ids if i.isdigit()]
+        items = service.get_module_lines_by_ids(int_ids)
+    else:
+        items, _, _ = service.get_module_lines(
+            module_names=_parse_csv(module_names),
+            uat_statuses=_parse_csv(uat_statuses),
+            skip=0,
+            limit=100000,
+            search=search,
+        )
+
+    return [
+        {
+            "id": line.id,
+            "request_id": line.request_id,
+            "request_number": line.request.request_number,
+            "request_title": line.request.title,
+            "request_state": line.request.request_state.name,
+            "module_id": line.module_id,
+            "module_technical_name": line.module_technical_name,
+            "module_version": line.module_version or "",
+            "module_md5_sum": line.module_md5_sum or "",
+            "uat_status": line.uat_status or "",
+            "uat_ticket": line.uat_ticket or "",
+            "tec_note": line.tec_note or "",
+            "created_at": line.created_at.isoformat(),
+            "updated_at": line.updated_at.isoformat() if line.updated_at else "",
+        }
+        for line in items
+    ]
 
 
 @router.get("/requests/", response_model=PaginatedDevelopmentRequestListResponse)

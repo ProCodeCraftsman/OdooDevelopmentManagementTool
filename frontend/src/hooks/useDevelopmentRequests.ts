@@ -5,6 +5,7 @@ import {
   type DevelopmentRequestCreate,
   type DevelopmentRequestUpdate,
   type DevelopmentRequestFilters,
+  type DevelopmentRequestLineFilters,
   type ModuleLineCreate,
   type ModuleLineUpdate,
 
@@ -27,6 +28,8 @@ export const queryKeys = {
   comments: (requestId: number) => ["requests", "comments", requestId] as const,
   auditLog: (requestId: number) => ["requests", "audit-log", requestId] as const,
   attachments: (requestId: number) => ["requests", "attachments", requestId] as const,
+  developmentRequestLines: (filters?: DevelopmentRequestLineFilters, page?: number, limit?: number) =>
+    ["requests", "lines", "list", filters, page, limit] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -54,6 +57,18 @@ export function useDevelopmentRequests(
   return useQuery({
     queryKey: queryKeys.developmentRequests(filters, page, limit),
     queryFn: () => developmentRequestsApi.list(filters, page, limit),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useDevelopmentRequestLines(
+  filters?: DevelopmentRequestLineFilters,
+  page = 1,
+  limit = 20
+) {
+  return useQuery({
+    queryKey: queryKeys.developmentRequestLines(filters, page, limit),
+    queryFn: () => developmentRequestsApi.getLines(filters, page, limit),
     placeholderData: keepPreviousData,
   });
 }

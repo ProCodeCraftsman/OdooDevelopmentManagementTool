@@ -18,6 +18,7 @@ import {
   Sun,
   Moon,
   GitBranch,
+  FileStack,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
@@ -39,6 +40,11 @@ const mainNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Development Requests", href: "/development-requests", icon: ClipboardList },
   { title: "Release Plans", href: "/release-plans", icon: GitBranch },
+];
+
+const drNavItems = [
+  { title: "Requests", href: "/development-requests", icon: ClipboardList },
+  { title: "DR Lines", href: "/development-requests/lines", icon: FileStack },
 ];
 
 const serverEnvNavItems = [
@@ -146,18 +152,42 @@ function ServerEnvNavItem({ item, collapsed, isMobile, onClick }: ServerEnvNavIt
   );
 }
 
+function DrNavItem({ item, collapsed, isMobile, onClick }: ServerEnvNavItemProps) {
+  const location = useLocation();
+  const isActive = location.pathname === item.href;
+  const Icon = item.icon;
+
+  return (
+    <Link
+      to={item.href}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ml-4 mr-2",
+        isActive
+          ? "bg-primary/10 text-primary font-medium"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {!collapsed && !isMobile && <span>{item.title}</span>}
+    </Link>
+  );
+}
+
 interface NavContentProps {
   collapsed: boolean;
   isMobile: boolean;
   isAdmin: boolean;
   settingsExpanded: boolean;
   serverEnvExpanded: boolean;
+  drExpanded: boolean;
   onToggleSettings: () => void;
   onToggleServerEnv: () => void;
+  onToggleDr: () => void;
   onItemClick?: () => void;
 }
 
-function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvExpanded, onToggleSettings, onToggleServerEnv, onItemClick }: NavContentProps) {
+function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvExpanded, drExpanded, onToggleSettings, onToggleServerEnv, onToggleDr, onItemClick }: NavContentProps) {
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
@@ -168,6 +198,7 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
   const isServerEnvActive = ["/modules", "/environments", "/reports/comparison"].some(
     (path) => location.pathname === path || location.pathname.startsWith(path + "/")
   );
+  const isDrActive = location.pathname.startsWith("/development-requests");
 
   const toggleTheme = useCallback(() => {
     if (theme === "light") {
@@ -182,9 +213,48 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
   return (
     <>
       <nav className="flex-1 space-y-1 p-2 overflow-y-auto">
-        {mainNavItems.map((item) => (
-          <NavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
-        ))}
+        <NavItem key={mainNavItems[0].href} item={mainNavItems[0]} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Link
+              to="/development-requests"
+              onClick={onToggleDr}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                isDrActive
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <ClipboardList className="h-5 w-5" />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 text-left">Dev Requests</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      drExpanded && "rotate-180"
+                    )}
+                  />
+                </>
+              )}
+            </Link>
+          </TooltipTrigger>
+          {collapsed && <TooltipContent side="right">Dev Requests</TooltipContent>}
+        </Tooltip>
+
+        {!collapsed && (
+          <div className={cn("overflow-hidden transition-all", drExpanded ? "max-h-96" : "max-h-0")}>
+            <div className="mt-1 space-y-0.5">
+              {drNavItems.map((item) => (
+                <DrNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <NavItem key={mainNavItems[2].href} item={mainNavItems[2]} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
 
         <div className="my-2 border-t" />
 
@@ -330,6 +400,8 @@ export function Sidebar() {
   const [settingsExpandedState, setSettingsExpandedState] = useState(false);
   const [userToggledServerEnv, setUserToggledServerEnv] = useState(false);
   const [serverEnvExpandedState, setServerEnvExpandedState] = useState(false);
+  const [userToggledDr, setUserToggledDr] = useState(false);
+  const [drExpandedState, setDrExpandedState] = useState(false);
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.roles?.some((r) => r.permissions?.includes("system:manage")) ?? false;
@@ -344,6 +416,11 @@ export function Sidebar() {
   const serverEnvExpanded = userToggledServerEnv 
     ? serverEnvExpandedState 
     : isServerEnvActive;
+
+  const isDrActive = location.pathname.startsWith("/development-requests");
+  const drExpanded = userToggledDr
+    ? drExpandedState
+    : isDrActive;
 
   useEffect(() => {
     const checkMobile = () => {
@@ -362,6 +439,11 @@ export function Sidebar() {
   const handleToggleServerEnv = useCallback(() => {
     setUserToggledServerEnv(true);
     setServerEnvExpandedState(prev => !prev);
+  }, []);
+
+  const handleToggleDr = useCallback(() => {
+    setUserToggledDr(true);
+    setDrExpandedState(prev => !prev);
   }, []);
 
   const handleMobileNavClick = useCallback(() => {
@@ -388,8 +470,10 @@ export function Sidebar() {
               isAdmin={isAdmin} 
               settingsExpanded={settingsExpanded}
               serverEnvExpanded={serverEnvExpanded}
+              drExpanded={drExpanded}
               onToggleSettings={handleToggleSettings}
               onToggleServerEnv={handleToggleServerEnv}
+              onToggleDr={handleToggleDr}
               onItemClick={handleMobileNavClick} 
             />
           </SheetContent>
@@ -427,8 +511,10 @@ export function Sidebar() {
         isAdmin={isAdmin} 
         settingsExpanded={settingsExpanded}
         serverEnvExpanded={serverEnvExpanded}
+        drExpanded={drExpanded}
         onToggleSettings={handleToggleSettings}
         onToggleServerEnv={handleToggleServerEnv}
+        onToggleDr={handleToggleDr}
       />
     </aside>
   );
