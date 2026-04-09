@@ -122,6 +122,11 @@ export function RequestsCommandTable({
   const navigate = useNavigate();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  const handleNavigateToDetail = useCallback((id: number) => {
+    const siblingIds = data.map((item) => item.id);
+    navigate(`/development-requests/${id}`, { state: { siblingIds } });
+  }, [navigate, data]);
+
   const toggleGroup = useCallback((key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -277,13 +282,13 @@ export function RequestsCommandTable({
           {/* Request Number — clickable link to detail */}
           <TableCell
             className="font-bold text-primary cursor-pointer w-[100px] whitespace-nowrap"
-            onClick={() => navigate(`/development-requests/${item.id}`)}
+            onClick={() => handleNavigateToDetail(item.id)}
           >
             {item.request_number}
           </TableCell>
 
           {/* Type */}
-          <TableCell className="w-[130px]" onClick={() => navigate(`/development-requests/${item.id}`)}>
+          <TableCell className="w-[130px]" onClick={() => handleNavigateToDetail(item.id)}>
             <Badge variant="outline" className="text-xs font-normal truncate max-w-[120px]">
               {item.request_type?.name ?? "—"}
             </Badge>
@@ -302,7 +307,7 @@ export function RequestsCommandTable({
           </TableCell>
 
           {/* Priority */}
-          <TableCell className="w-[110px]" onClick={() => navigate(`/development-requests/${item.id}`)}>
+          <TableCell className="w-[110px]" onClick={() => handleNavigateToDetail(item.id)}>
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getPriorityClass(item.priority?.level ?? 1)}`}
             >
@@ -313,7 +318,7 @@ export function RequestsCommandTable({
           {/* Category */}
           <TableCell
             className="w-[130px] text-sm text-muted-foreground truncate max-w-[130px]"
-            onClick={() => navigate(`/development-requests/${item.id}`)}
+            onClick={() => handleNavigateToDetail(item.id)}
           >
             {item.functional_category?.name ?? "—"}
           </TableCell>
@@ -321,7 +326,7 @@ export function RequestsCommandTable({
           {/* Title */}
           <TableCell
             className="cursor-pointer"
-            onClick={() => navigate(`/development-requests/${item.id}`)}
+            onClick={() => handleNavigateToDetail(item.id)}
           >
             <span className="block max-w-[240px] truncate text-sm font-medium" title={item.title}>
               {item.title}
@@ -336,7 +341,7 @@ export function RequestsCommandTable({
           {/* Date */}
           <TableCell
             className="w-[100px] text-sm text-muted-foreground whitespace-nowrap"
-            onClick={() => navigate(`/development-requests/${item.id}`)}
+            onClick={() => handleNavigateToDetail(item.id)}
           >
             {item.request_date
               ? new Date(item.request_date).toLocaleDateString()

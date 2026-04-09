@@ -31,7 +31,6 @@ AUDIT_FIELDS_HEADER: Set[str] = {
     "description",
     "request_type_id",
     "parent_request_id",
-    "additional_info",
 }
 
 # Fields on RequestModuleLine that trigger audit entries
@@ -40,6 +39,7 @@ AUDIT_FIELDS_MODULE_LINE: Set[str] = {
     "module_md5_sum",
     "uat_status",
     "module_id",
+    "tec_note",
 }
 
 

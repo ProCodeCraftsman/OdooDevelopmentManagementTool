@@ -39,6 +39,9 @@ const mainNavItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Development Requests", href: "/development-requests", icon: ClipboardList },
   { title: "Release Plans", href: "/release-plans", icon: GitBranch },
+];
+
+const serverEnvNavItems = [
   { title: "Modules", href: "/modules", icon: Package },
   { title: "Environments", href: "/environments", icon: Server },
   { title: "Reports", href: "/reports/comparison", icon: FileText },
@@ -114,16 +117,47 @@ function SettingsNavItem({ item, collapsed, isMobile, onClick }: SettingsNavItem
   );
 }
 
+interface ServerEnvNavItemProps {
+  item: typeof serverEnvNavItems[0];
+  collapsed: boolean;
+  isMobile: boolean;
+  onClick?: () => void;
+}
+
+function ServerEnvNavItem({ item, collapsed, isMobile, onClick }: ServerEnvNavItemProps) {
+  const location = useLocation();
+  const isActive = location.pathname === item.href;
+  const Icon = item.icon;
+
+  return (
+    <Link
+      to={item.href}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ml-4 mr-2",
+        isActive
+          ? "bg-primary/10 text-primary font-medium"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {!collapsed && !isMobile && <span>{item.title}</span>}
+    </Link>
+  );
+}
+
 interface NavContentProps {
   collapsed: boolean;
   isMobile: boolean;
   isAdmin: boolean;
   settingsExpanded: boolean;
+  serverEnvExpanded: boolean;
   onToggleSettings: () => void;
+  onToggleServerEnv: () => void;
   onItemClick?: () => void;
 }
 
-function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, onToggleSettings, onItemClick }: NavContentProps) {
+function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvExpanded, onToggleSettings, onToggleServerEnv, onItemClick }: NavContentProps) {
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
@@ -131,6 +165,9 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, onToggleSe
   const setTheme = useThemeStore((state) => state.setTheme);
 
   const isSettingsActive = location.pathname.startsWith("/settings");
+  const isServerEnvActive = ["/modules", "/environments", "/reports/comparison"].some(
+    (path) => location.pathname === path || location.pathname.startsWith(path + "/")
+  );
 
   const toggleTheme = useCallback(() => {
     if (theme === "light") {
@@ -149,13 +186,55 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, onToggleSe
           <NavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
         ))}
 
+        <div className="my-2 border-t" />
+
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Link
+              to="/modules"
+              onClick={onToggleServerEnv}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                isServerEnvActive
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <Server className="h-5 w-5" />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 text-left">Server Environments</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      serverEnvExpanded && "rotate-180"
+                    )}
+                  />
+                </>
+              )}
+            </Link>
+          </TooltipTrigger>
+          {collapsed && <TooltipContent side="right">Server Environments</TooltipContent>}
+        </Tooltip>
+
+        {!collapsed && (
+          <div className={cn("overflow-hidden transition-all", serverEnvExpanded ? "max-h-96" : "max-h-0")}>
+            <div className="mt-1 space-y-0.5">
+              {serverEnvNavItems.map((item) => (
+                <ServerEnvNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {isAdmin && (
           <>
             <div className="my-2 border-t" />
             
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <button
+                <Link
+                  to="/settings/environments"
                   onClick={onToggleSettings}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
@@ -176,7 +255,7 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, onToggleSe
                       />
                     </>
                   )}
-                </button>
+                </Link>
               </TooltipTrigger>
               {collapsed && <TooltipContent side="right">Settings</TooltipContent>}
             </Tooltip>
@@ -249,6 +328,8 @@ export function Sidebar() {
   const [isMobile, setIsMobile] = useState(false);
   const [userToggledSettings, setUserToggledSettings] = useState(false);
   const [settingsExpandedState, setSettingsExpandedState] = useState(false);
+  const [userToggledServerEnv, setUserToggledServerEnv] = useState(false);
+  const [serverEnvExpandedState, setServerEnvExpandedState] = useState(false);
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.roles?.some((r) => r.permissions?.includes("system:manage")) ?? false;
@@ -256,6 +337,13 @@ export function Sidebar() {
   const settingsExpanded = userToggledSettings 
     ? settingsExpandedState 
     : location.pathname.startsWith("/settings");
+
+  const isServerEnvActive = ["/modules", "/environments", "/reports/comparison"].some(
+    (path) => location.pathname === path || location.pathname.startsWith(path + "/")
+  );
+  const serverEnvExpanded = userToggledServerEnv 
+    ? serverEnvExpandedState 
+    : isServerEnvActive;
 
   useEffect(() => {
     const checkMobile = () => {
@@ -269,6 +357,11 @@ export function Sidebar() {
   const handleToggleSettings = useCallback(() => {
     setUserToggledSettings(true);
     setSettingsExpandedState(prev => !prev);
+  }, []);
+
+  const handleToggleServerEnv = useCallback(() => {
+    setUserToggledServerEnv(true);
+    setServerEnvExpandedState(prev => !prev);
   }, []);
 
   const handleMobileNavClick = useCallback(() => {
@@ -294,7 +387,9 @@ export function Sidebar() {
               isMobile={isMobile} 
               isAdmin={isAdmin} 
               settingsExpanded={settingsExpanded}
+              serverEnvExpanded={serverEnvExpanded}
               onToggleSettings={handleToggleSettings}
+              onToggleServerEnv={handleToggleServerEnv}
               onItemClick={handleMobileNavClick} 
             />
           </SheetContent>
@@ -331,7 +426,9 @@ export function Sidebar() {
         isMobile={isMobile} 
         isAdmin={isAdmin} 
         settingsExpanded={settingsExpanded}
+        serverEnvExpanded={serverEnvExpanded}
         onToggleSettings={handleToggleSettings}
+        onToggleServerEnv={handleToggleServerEnv}
       />
     </aside>
   );

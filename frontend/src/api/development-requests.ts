@@ -105,6 +105,7 @@ export interface RequestModuleLine {
   email_thread_zip: string | null;
   uat_status: string | null;
   uat_ticket: string | null;
+  tec_note: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -179,7 +180,6 @@ export interface DevelopmentRequest {
   request_state_id: number;
   priority_id: number;
   description: string;
-  additional_info: string | null;
   comments: string | null;
   uat_request_id: string | null;
   assigned_developer_id: number | null;
@@ -238,7 +238,6 @@ export interface DevelopmentRequestCreate {
   functional_category_id: number;
   priority_id: number;
   description: string;
-  additional_info?: string;
   comments?: string;
   uat_request_id?: string;
   assigned_developer_id?: number;
@@ -252,7 +251,6 @@ export interface DevelopmentRequestUpdate {
   functional_category_id?: number;
   priority_id?: number;
   description?: string;
-  additional_info?: string;
   comments?: string;
   uat_request_id?: string;
   assigned_developer_id?: number;
@@ -277,6 +275,7 @@ export interface ModuleLineUpdate {
   email_thread_zip?: string;
   uat_status?: string;
   uat_ticket?: string;
+  tec_note?: string;
 }
 
 export interface BulkModuleLineCreate {

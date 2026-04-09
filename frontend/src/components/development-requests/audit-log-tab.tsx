@@ -14,11 +14,11 @@ const FIELD_LABELS: Record<string, string> = {
   description: "Description",
   request_type_id: "Request Type",
   parent_request_id: "Parent Request",
-  additional_info: "Additional Info",
   module_version: "Module Version",
   module_md5_sum: "MD5 Sum",
   uat_status: "UAT Status",
   module_id: "Module",
+  tec_note: "Tec. Note",
 };
 
 function truncate(val: string | null, max = 60) {

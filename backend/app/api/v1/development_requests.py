@@ -542,7 +542,6 @@ def export_requests(
             "functional_category": r.functional_category.name if r.functional_category else "",
             "title": r.title,
             "description": r.description,
-            "additional_info": r.additional_info or "",
             "comments": r.comments or "",
             "uat_request_id": r.uat_request_id or "",
             "assigned_developer": r.assigned_developer.username if r.assigned_developer else "",

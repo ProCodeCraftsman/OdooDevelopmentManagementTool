@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import type { ChangeEvent } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import {
-  Edit, RotateCcw, Archive, Trash, Plus, Pencil, X, Check, Search, ChevronDown, ChevronRight,
+  Edit, RotateCcw, Archive, Trash, Plus, Pencil, X, Check, Search,
+  ChevronRight, ChevronLeft,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -29,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   useDevelopmentRequest,
   useControlParameters,
@@ -184,6 +184,7 @@ interface EditLineState {
   email_thread_zip: string;
   uat_status: string;
   uat_ticket: string;
+  tec_note: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +200,6 @@ const editSchema = z.object({
   request_state_id: z.number().optional(),
   parent_request_id: z.number().optional(),
   description: z.string().min(1, "Description is required"),
-  additional_info: z.string().optional(),
 });
 
 type EditFormData = z.infer<typeof editSchema>;
@@ -211,8 +211,15 @@ type EditFormData = z.infer<typeof editSchema>;
 export function DevelopmentRequestsDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const requestId = parseInt(id || "0");
   const { user } = useAuthStore();
+
+  // Prev/next navigation from list context
+  const siblingIds: number[] = (location.state as { siblingIds?: number[] })?.siblingIds ?? [];
+  const siblingIndex = siblingIds.indexOf(requestId);
+  const prevId = siblingIndex > 0 ? siblingIds[siblingIndex - 1] : null;
+  const nextId = siblingIndex >= 0 && siblingIndex < siblingIds.length - 1 ? siblingIds[siblingIndex + 1] : null;
 
   const { data: request, isLoading, error } = useDevelopmentRequest(requestId);
   const { data: controlParams } = useControlParameters();
@@ -234,8 +241,6 @@ export function DevelopmentRequestsDetailPage() {
   const [showAddModuleDialog, setShowAddModuleDialog] = useState(false);
   const [editLine, setEditLine] = useState<EditLineState | null>(null);
   const [relatedInput, setRelatedInput] = useState("");
-  const [datesOpen, setDatesOpen] = useState(false);
-  const [traceabilityOpen, setTraceabilityOpen] = useState(false);
 
   const {
     register,
@@ -269,7 +274,6 @@ export function DevelopmentRequestsDetailPage() {
         request_state_id: request.request_state_id,
         parent_request_id: request.parent_request_id ?? undefined,
         description: request.description,
-        additional_info: request.additional_info ?? "",
       });
     }
   }, [request, reset]);
@@ -333,7 +337,6 @@ export function DevelopmentRequestsDetailPage() {
       request_state_id: request.request_state_id,
       parent_request_id: request.parent_request_id ?? undefined,
       description: request.description,
-      additional_info: request.additional_info ?? "",
     });
   };
 
@@ -344,7 +347,6 @@ export function DevelopmentRequestsDetailPage() {
       functional_category_id: data.functional_category_id,
       priority_id: data.priority_id,
       description: data.description,
-      additional_info: data.additional_info || undefined,
       assigned_developer_id: data.assigned_developer_id,
       request_state_id: data.request_state_id,
       parent_request_id: data.parent_request_id,
@@ -384,6 +386,7 @@ export function DevelopmentRequestsDetailPage() {
       email_thread_zip: line.email_thread_zip ?? "",
       uat_status: line.uat_status ?? "",
       uat_ticket: line.uat_ticket ?? "",
+      tec_note: line.tec_note ?? "",
     });
   };
 
@@ -397,6 +400,7 @@ export function DevelopmentRequestsDetailPage() {
           module_version: editLine.version || undefined,
           module_md5_sum: editLine.md5_sum || undefined,
           email_thread_zip: editLine.email_thread_zip || undefined,
+          tec_note: editLine.tec_note || undefined,
           uat_status: editLine.uat_status || undefined,
           uat_ticket: editLine.uat_ticket || undefined,
         },
@@ -438,13 +442,40 @@ export function DevelopmentRequestsDetailPage() {
     <div className="space-y-6">
       {/* ── Page header ── */}
       <div className="space-y-3">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Link to="/development-requests" className="hover:text-foreground transition-colors">
-            Development Requests
-          </Link>
-          <span>/</span>
-          <span className="text-foreground font-medium">{request.request_number}</span>
+        {/* Breadcrumb + Prev/Next Navigation */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Link to="/development-requests" className="hover:text-foreground transition-colors">
+              Development Requests
+            </Link>
+            <span>/</span>
+            <span className="text-foreground font-medium">{request.request_number}</span>
+          </div>
+          {siblingIds.length > 0 && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!prevId}
+                onClick={() => prevId && navigate(`/development-requests/${prevId}`, { state: location.state })}
+                className="h-7 px-2"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />Prev
+              </Button>
+              <span className="text-xs text-muted-foreground px-1">
+                {siblingIndex + 1} / {siblingIds.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!nextId}
+                onClick={() => nextId && navigate(`/development-requests/${nextId}`, { state: location.state })}
+                className="h-7 px-2"
+              >
+                Next<ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Title + State Badge + Actions */}
@@ -526,12 +557,11 @@ export function DevelopmentRequestsDetailPage() {
         </div>
       </div>
 
-      {/* ── Main content — Jira-style 3-col grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* ── Left column (col-span-2): Work Area ── */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Description */}
-          <Card>
+      {/* ── Main layout: row 1 = Description + Sidebar, row 2 = full-width Tabs ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-stretch lg:[grid-template-areas:'desc_desc_side''tabs_tabs_tabs']">
+        {/* Description */}
+        <div className="lg:[grid-area:desc] lg:flex lg:flex-col">
+          <Card className="lg:flex-1">
             <CardHeader>
               <CardTitle className="text-base">Description</CardTitle>
             </CardHeader>
@@ -555,34 +585,12 @@ export function DevelopmentRequestsDetailPage() {
               )}
             </CardContent>
           </Card>
+        </div>
 
-          {/* Additional Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Additional Info</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!isEditing ? (
-                request.additional_info ? (
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {request.additional_info}
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No additional info provided.</p>
-                )
-              ) : (
-                <Textarea
-                  placeholder="Any additional context or notes (optional)…"
-                  className="min-h-[120px] text-sm"
-                  {...register("additional_info")}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* ── Tabs: Modules, Comments, Attachments, History ── */}
+        {/* ── Full-width Tabs row ── */}
+        <div className="lg:[grid-area:tabs]">
           <Tabs defaultValue="modules">
-            <TabsList>
+            <TabsList className="h-auto flex-wrap gap-y-1">
               <TabsTrigger value="modules">
                 Modules ({request.module_lines?.length ?? 0})
               </TabsTrigger>
@@ -594,6 +602,7 @@ export function DevelopmentRequestsDetailPage() {
               </TabsTrigger>
               <TabsTrigger value="linked-plans">Release Plans</TabsTrigger>
               <TabsTrigger value="history">History</TabsTrigger>
+              <TabsTrigger value="other-info">Other Information</TabsTrigger>
             </TabsList>
 
             {/* Modules Tab */}
@@ -622,6 +631,7 @@ export function DevelopmentRequestsDetailPage() {
                             <TableHead>MD5 Sum</TableHead>
                             <TableHead>UAT Status</TableHead>
                             <TableHead>UAT Ticket</TableHead>
+                            <TableHead>Tec. Note</TableHead>
                             <TableHead>Added</TableHead>
                             {canManageLines && !isClosed && !isArchived && (
                               <TableHead className="text-right">Actions</TableHead>
@@ -649,6 +659,11 @@ export function DevelopmentRequestsDetailPage() {
                               </TableCell>
                               <TableCell className="text-sm">
                                 {line.uat_ticket || <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-sm max-w-[160px]">
+                                {line.tec_note ? (
+                                  <span className="truncate block" title={line.tec_note}>{line.tec_note}</span>
+                                ) : <span className="text-muted-foreground">—</span>}
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                                 {new Date(line.created_at).toLocaleDateString()}
@@ -725,11 +740,148 @@ export function DevelopmentRequestsDetailPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Other Information Tab */}
+            <TabsContent value="other-info" className="mt-4">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Dates column */}
+                    <div className="space-y-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                        Dates &amp; Tracking
+                      </p>
+                      {renderViewField("Iteration", `#${request.iteration_counter}`)}
+                      {renderViewField(
+                        "Request Date",
+                        request.request_date
+                          ? new Date(request.request_date).toLocaleDateString()
+                          : null
+                      )}
+                      {request.request_close_date &&
+                        renderViewField(
+                          "Close Date",
+                          new Date(request.request_close_date).toLocaleDateString()
+                        )}
+                      {request.created_by &&
+                        renderViewField("Created By", request.created_by.username)}
+                      {request.updated_by &&
+                        renderViewField("Last Updated By", request.updated_by.username)}
+                      {renderViewField(
+                        "Created At",
+                        new Date(request.created_at).toLocaleString()
+                      )}
+                      {renderViewField(
+                        "Updated At",
+                        new Date(request.updated_at).toLocaleString()
+                      )}
+                    </div>
+
+                    {/* Traceability column */}
+                    <div className="space-y-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                        Traceability
+                      </p>
+                      {/* Parent request */}
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                          Parent Request
+                        </p>
+                        {!isEditing ? (
+                          request.parent_request_id ? (
+                            <Button
+                              variant="link"
+                              className="p-0 h-auto text-sm"
+                              onClick={() => navigate(`/development-requests/${request.parent_request_id}`)}
+                            >
+                              View #{request.parent_request_id}
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )
+                        ) : (
+                          <div className="space-y-1">
+                            <ParentRequestSearch
+                              value={watch("parent_request_id")}
+                              onChange={(id) => setValue("parent_request_id", id)}
+                              excludeId={requestId}
+                              disabled={isClosed}
+                            />
+                            {isClosed && (
+                              <p className="text-xs text-muted-foreground">
+                                Disabled — request is in a final state.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Related requests */}
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                          Related Requests
+                        </p>
+                        {request.related_requests?.length ? (
+                          <div className="space-y-1 mb-2">
+                            {request.related_requests.map((rel) => (
+                              <div key={rel.id} className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <Button
+                                    variant="link"
+                                    className="p-0 h-auto text-sm"
+                                    onClick={() => navigate(`/development-requests/${rel.id}`)}
+                                  >
+                                    {rel.request_number}
+                                  </Button>
+                                  <p className="text-xs text-muted-foreground truncate">{rel.title}</p>
+                                </div>
+                                {canEdit && !isArchived && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 shrink-0"
+                                    onClick={() => removeRelated.mutate({ requestId, relatedId: rel.id })}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground mb-2">No related requests.</p>
+                        )}
+                        {canEdit && !isArchived && (
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Request ID"
+                              value={relatedInput}
+                              onChange={(e) => setRelatedInput(e.target.value)}
+                              className="h-8 text-sm"
+                              onKeyDown={(e) => { if (e.key === "Enter") handleAddRelated(); }}
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={handleAddRelated}
+                              disabled={addRelated.isPending}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
 
-        {/* ── Right column (col-span-1): Meta Area — sticky ── */}
-        <div className="sticky top-6 space-y-4">
+        {/* ── Sidebar ── */}
+        <div className="lg:[grid-area:side] space-y-4 lg:sticky lg:top-6">
           <Card>
             <CardContent className="p-0 divide-y">
               {/* Section 1: Details */}
@@ -738,7 +890,7 @@ export function DevelopmentRequestsDetailPage() {
                   Details
                 </p>
                 {!isEditing ? (
-                  <>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                     {renderViewField("Type", request.request_type?.name)}
                     {renderViewField("Category", request.functional_category?.name)}
                     {renderViewField(
@@ -748,7 +900,7 @@ export function DevelopmentRequestsDetailPage() {
                       </Badge>
                     )}
                     {renderViewField(
-                      "Assigned Developer",
+                      "Assigned",
                       request.assigned_developer?.username || "Unassigned"
                     )}
                     {renderViewField(
@@ -757,9 +909,9 @@ export function DevelopmentRequestsDetailPage() {
                         {request.request_state?.name}
                       </Badge>
                     )}
-                  </>
+                  </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Request Type</Label>
                       <Select
@@ -872,148 +1024,6 @@ export function DevelopmentRequestsDetailPage() {
                 )}
               </div>
 
-              {/* Section 2: Dates */}
-              <Collapsible.Root open={datesOpen} onOpenChange={setDatesOpen}>
-                <Collapsible.Trigger asChild>
-                  <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 rounded-t-md">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Dates
-                    </p>
-                    {datesOpen ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                </Collapsible.Trigger>
-                <Collapsible.Content className="p-4 space-y-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200">
-                {renderViewField("Iteration", `#${request.iteration_counter}`)}
-                {renderViewField(
-                  "Request Date",
-                  request.request_date
-                    ? new Date(request.request_date).toLocaleDateString()
-                    : null
-                )}
-                {request.request_close_date &&
-                  renderViewField(
-                    "Close Date",
-                    new Date(request.request_close_date).toLocaleDateString()
-                  )}
-                {request.created_by &&
-                  renderViewField("Created By", request.created_by.username)}
-                {request.updated_by &&
-                  renderViewField("Last Updated By", request.updated_by.username)}
-                </Collapsible.Content>
-              </Collapsible.Root>
-
-              {/* Section 3: Traceability */}
-              <Collapsible.Root open={traceabilityOpen} onOpenChange={setTraceabilityOpen}>
-                <Collapsible.Trigger asChild>
-                  <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 rounded-t-md">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Traceability
-                    </p>
-                    {traceabilityOpen ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                </Collapsible.Trigger>
-                <Collapsible.Content className="p-4 space-y-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200">
-
-                {/* Parent request */}
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                    Parent Request
-                  </p>
-                  {!isEditing ? (
-                    request.parent_request_id ? (
-                      <Button
-                        variant="link"
-                        className="p-0 h-auto text-sm"
-                        onClick={() => navigate(`/development-requests/${request.parent_request_id}`)}
-                      >
-                        View #{request.parent_request_id}
-                      </Button>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )
-                  ) : (
-                    <div className="space-y-1">
-                      <ParentRequestSearch
-                        value={watch("parent_request_id")}
-                        onChange={(id) => setValue("parent_request_id", id)}
-                        excludeId={requestId}
-                        disabled={isClosed}
-                      />
-                      {isClosed && (
-                        <p className="text-xs text-muted-foreground">
-                          Disabled — request is in a final state.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Related requests */}
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                    Related Requests
-                  </p>
-                  {request.related_requests?.length ? (
-                    <div className="space-y-1 mb-2">
-                      {request.related_requests.map((rel) => (
-                        <div key={rel.id} className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <Button
-                              variant="link"
-                              className="p-0 h-auto text-sm"
-                              onClick={() => navigate(`/development-requests/${rel.id}`)}
-                            >
-                              {rel.request_number}
-                            </Button>
-                            <p className="text-xs text-muted-foreground truncate">{rel.title}</p>
-                          </div>
-                          {canEdit && !isArchived && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 shrink-0"
-                              onClick={() => removeRelated.mutate({ requestId, relatedId: rel.id })}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground mb-2">No related requests.</p>
-                  )}
-                  {canEdit && !isArchived && (
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Request ID"
-                        value={relatedInput}
-                        onChange={(e) => setRelatedInput(e.target.value)}
-                        className="h-8 text-sm"
-                        onKeyDown={(e) => { if (e.key === "Enter") handleAddRelated(); }}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8"
-                        onClick={handleAddRelated}
-                        disabled={addRelated.isPending}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                </Collapsible.Content>
-              </Collapsible.Root>
             </CardContent>
           </Card>
 
@@ -1111,6 +1121,15 @@ export function DevelopmentRequestsDetailPage() {
                     onChange={(e) => setEditLine({ ...editLine, uat_ticket: e.target.value })}
                   />
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Tec. Note</Label>
+                <Textarea
+                  placeholder="Technical notes for this module line…"
+                  className="min-h-[80px] text-sm"
+                  value={editLine.tec_note}
+                  onChange={(e) => setEditLine({ ...editLine, tec_note: e.target.value })}
+                />
               </div>
             </div>
           )}

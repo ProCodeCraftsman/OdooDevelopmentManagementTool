@@ -76,6 +76,7 @@ class RequestModuleLineBase(BaseModel):
     email_thread_zip: Optional[str] = None
     uat_status: Optional[str] = None
     uat_ticket: Optional[str] = None
+    tec_note: Optional[str] = None
 
 
 class RequestModuleLineCreate(RequestModuleLineBase):
@@ -88,6 +89,7 @@ class RequestModuleLineUpdate(BaseModel):
     email_thread_zip: Optional[str] = None
     uat_status: Optional[str] = None
     uat_ticket: Optional[str] = None
+    tec_note: Optional[str] = None
 
 
 class RequestModuleLineResponse(RequestModuleLineBase):
@@ -207,7 +209,6 @@ class DevelopmentRequestBase(BaseModel):
     functional_category_id: int
     priority_id: int
     description: str
-    additional_info: Optional[str] = None
     comments: Optional[str] = None
     uat_request_id: Optional[str] = None
     assigned_developer_id: Optional[int] = None
@@ -224,7 +225,6 @@ class DevelopmentRequestUpdate(BaseModel):
     functional_category_id: Optional[int] = None
     priority_id: Optional[int] = None
     description: Optional[str] = None
-    additional_info: Optional[str] = None
     comments: Optional[str] = None
     uat_request_id: Optional[str] = None
     assigned_developer_id: Optional[int] = None
@@ -241,7 +241,6 @@ class DevelopmentRequestListResponse(BaseModel):
     request_state_id: int
     priority_id: int
     description: str
-    additional_info: Optional[str] = None
     assigned_developer_id: Optional[int]
     request_date: datetime
     request_close_date: Optional[datetime]

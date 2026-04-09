@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useModuleSearch } from "@/hooks/useModules";
 import { useBulkAddModuleLines, useDeleteModuleLine, queryKeys } from "@/hooks/useDevelopmentRequests";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,6 +23,7 @@ interface SelectedModule {
   version: string;
   md5_sum: string;
   email_thread_zip: string;
+  tec_note: string;
   isLoadingVersion: boolean;
 }
 
@@ -43,7 +45,7 @@ export function AddModuleLineDialog({
     if (!selectedModules.some((m) => m.id === module.id)) {
       setSelectedModules((prev) => [
         ...prev,
-        { ...module, version: "", md5_sum: "", email_thread_zip: "", isLoadingVersion: true },
+        { ...module, version: "", md5_sum: "", email_thread_zip: "", tec_note: "", isLoadingVersion: true },
       ]);
     }
     setSearchQuery("");
@@ -93,6 +95,7 @@ export function AddModuleLineDialog({
       module_version: m.version || undefined,
       module_md5_sum: m.md5_sum || undefined,
       email_thread_zip: m.email_thread_zip || undefined,
+      tec_note: m.tec_note || undefined,
     }));
 
     await bulkAddMutation.mutateAsync({ requestId: request.id, lines });
@@ -213,6 +216,15 @@ export function AddModuleLineDialog({
                         maxLength={500}
                       />
                     </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Tec. Note</Label>
+                    <Textarea
+                      placeholder="Technical notes for this module (optional)…"
+                      className="min-h-[64px] text-sm resize-none"
+                      value={module.tec_note}
+                      onChange={(e) => updateField(module.id, "tec_note", e.target.value)}
+                    />
                   </div>
                 </div>
               ))}

@@ -31,7 +31,6 @@ const formSchema = z.object({
   priority_id: z.number().min(1, "Priority is required"),
   assigned_developer_id: z.number().optional(),
   description: z.string().min(1, "Description is required"),
-  additional_info: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -62,7 +61,6 @@ export function DevelopmentRequestsFormPage() {
         functional_category_id: data.functional_category_id,
         priority_id: data.priority_id,
         description: data.description,
-        additional_info: data.additional_info || undefined,
         assigned_developer_id: data.assigned_developer_id,
       };
       await createMutation.mutateAsync(createData);
@@ -217,15 +215,6 @@ export function DevelopmentRequestsFormPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="additional_info">Additional Info</Label>
-              <Textarea
-                id="additional_info"
-                placeholder="Any additional context or notes (optional)..."
-                className="min-h-[100px]"
-                {...register("additional_info")}
-              />
-            </div>
           </CardContent>
         </Card>
 

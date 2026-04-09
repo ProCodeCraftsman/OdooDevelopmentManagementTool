@@ -141,9 +141,9 @@ def calculate_release_action(source_version: str, target_version: str) -> str:
     
     comparison = _compare_tuples(s_ver, t_ver)
     
-    if comparison > 0:
+    if comparison < 0:
         return "Upgrade"
-    elif comparison < 0:
+    elif comparison > 0:
         return "Error (Downgrade)"
     else:
         return "No Action"
