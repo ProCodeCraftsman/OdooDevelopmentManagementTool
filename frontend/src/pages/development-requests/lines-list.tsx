@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useDevelopmentRequestLines } from "@/hooks/useDevelopmentRequests";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -64,8 +64,17 @@ export function DevelopmentRequestLinesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [allRecordsSelected, setAllRecordsSelected] = useState(false);
 
-  // Collapsible groups
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Collapsible groups - persist to localStorage
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    const stored = localStorage.getItem("dr-lines-collapsed-groups");
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
+
+  // Sync to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem("dr-lines-collapsed-groups", JSON.stringify([...collapsedGroups]));
+  }, [collapsedGroups]);
 
   // Export loading
   const [isExporting, setIsExporting] = useState(false);
@@ -116,7 +125,11 @@ export function DevelopmentRequestLinesPage() {
 
   const handleToggleRow = useCallback((id: number) => {
     const next = new Set(selectedIds);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
     setSelectedIds(next);
     setAllRecordsSelected(false);
   }, [selectedIds]);

@@ -114,7 +114,26 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
         """
         Run a lightweight GROUP BY aggregation for the given group_by field.
         Returns [{"key": str, "label": str, "count": int}] sorted for display.
+        
+        Strategy: Get filtered request IDs first, then count groups from those IDs.
+        This avoids JOIN conflicts between filters and group-by aggregations.
         """
+        filtered_ids_query = (
+            self.db.query(DevelopmentRequest.id)
+            .outerjoin(RequestState, DevelopmentRequest.request_state_id == RequestState.id)
+            .outerjoin(User, DevelopmentRequest.assigned_developer_id == User.id)
+            .outerjoin(Priority, DevelopmentRequest.priority_id == Priority.id)
+            .outerjoin(FunctionalCategory, DevelopmentRequest.functional_category_id == FunctionalCategory.id)
+        )
+        filtered_ids_query = self._apply_filters(
+            filtered_ids_query, request_type_ids, request_state_ids, functional_category_ids,
+            priority_ids, assigned_developer_ids, is_archived, search,
+        )
+        filtered_ids = {row[0] for row in filtered_ids_query.all()}
+        
+        if not filtered_ids:
+            return []
+        
         if group_by == "state_category":
             base = (
                 self.db.query(
@@ -123,10 +142,7 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
                     func.count(DevelopmentRequest.id).label("count"),
                 )
                 .join(RequestState, DevelopmentRequest.request_state_id == RequestState.id)
-            )
-            base = self._apply_filters(
-                base, request_type_ids, request_state_ids, functional_category_ids,
-                priority_ids, assigned_developer_ids, is_archived, search,
+                .filter(DevelopmentRequest.id.in_(filtered_ids))
             )
             rows = base.group_by(RequestState.category).order_by(RequestState.category).all()
 
@@ -138,12 +154,9 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
                     func.count(DevelopmentRequest.id).label("count"),
                 )
                 .outerjoin(User, DevelopmentRequest.assigned_developer_id == User.id)
+                .filter(DevelopmentRequest.id.in_(filtered_ids))
             )
-            base = self._apply_filters(
-                base, request_type_ids, request_state_ids, functional_category_ids,
-                priority_ids, assigned_developer_ids, is_archived, search,
-            )
-            rows = base.group_by(User.username).order_by(User.username.nulls_last()).all()
+            rows = base.group_by(User.username).order_by(func.coalesce(User.username, "zzz")).all()
 
         elif group_by == "priority":
             base = (
@@ -153,10 +166,7 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
                     func.count(DevelopmentRequest.id).label("count"),
                 )
                 .join(Priority, DevelopmentRequest.priority_id == Priority.id)
-            )
-            base = self._apply_filters(
-                base, request_type_ids, request_state_ids, functional_category_ids,
-                priority_ids, assigned_developer_ids, is_archived, search,
+                .filter(DevelopmentRequest.id.in_(filtered_ids))
             )
             rows = base.group_by(Priority.name, Priority.level).order_by(Priority.level.desc()).all()
 
@@ -168,17 +178,14 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
                     func.count(DevelopmentRequest.id).label("count"),
                 )
                 .join(FunctionalCategory, DevelopmentRequest.functional_category_id == FunctionalCategory.id)
-            )
-            base = self._apply_filters(
-                base, request_type_ids, request_state_ids, functional_category_ids,
-                priority_ids, assigned_developer_ids, is_archived, search,
+                .filter(DevelopmentRequest.id.in_(filtered_ids))
             )
             rows = base.group_by(FunctionalCategory.name).order_by(FunctionalCategory.name).all()
 
         else:
             return []
 
-        return [{"key": r.key, "label": r.label, "count": r.count} for r in rows]
+        return [{"key": r.key or "", "label": r.label or "", "count": r.count} for r in rows]
 
     def get_all_with_filters(
         self,

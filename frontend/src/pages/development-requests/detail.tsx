@@ -622,54 +622,56 @@ export function DevelopmentRequestsDetailPage() {
                       No modules added yet.
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
+                    <div className="overflow-x-auto min-w-full">
+                      <Table className="table-fixed">
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Module</TableHead>
-                            <TableHead>Version</TableHead>
-                            <TableHead>MD5 Sum</TableHead>
-                            <TableHead>UAT Status</TableHead>
-                            <TableHead>UAT Ticket</TableHead>
-                            <TableHead>Tec. Note</TableHead>
-                            <TableHead>Added</TableHead>
+                            <TableHead className="min-w-[140px] whitespace-nowrap">Module</TableHead>
+                            <TableHead className="min-w-[140px] whitespace-nowrap">Version</TableHead>
+                            <TableHead className="min-w-[140px] whitespace-nowrap">MD5 Sum</TableHead>
+                            <TableHead className="min-w-[140px] whitespace-nowrap">UAT Status</TableHead>
+                            <TableHead className="min-w-[140px] whitespace-nowrap">UAT Ticket</TableHead>
+                            <TableHead className="min-w-[140px] whitespace-nowrap">Tec. Note</TableHead>
+                            <TableHead className="min-w-[140px] whitespace-nowrap">Added</TableHead>
                             {canManageLines && !isClosed && !isArchived && (
-                              <TableHead className="text-right">Actions</TableHead>
+                              <TableHead className="min-w-[140px] text-right">Actions</TableHead>
                             )}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {request.module_lines.map((line) => (
-                            <TableRow key={line.id}>
-                              <TableCell className="font-medium">{line.module_technical_name}</TableCell>
-                              <TableCell>
+                            <TableRow key={line.id} className="h-10">
+                              <TableCell className="font-medium whitespace-nowrap align-middle py-2">
+                                {line.module_technical_name}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap align-middle py-2">
                                 {line.module_version || <span className="text-muted-foreground">—</span>}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="whitespace-nowrap align-middle py-2">
                                 {line.module_md5_sum ? (
                                   <span className="font-mono text-xs" title={line.module_md5_sum}>
                                     {line.module_md5_sum.slice(0, 12)}…
                                   </span>
                                 ) : <span className="text-muted-foreground">—</span>}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="whitespace-nowrap align-middle py-2">
                                 {line.uat_status ? (
                                   <Badge variant="outline" className="text-xs">{line.uat_status}</Badge>
                                 ) : <span className="text-muted-foreground">—</span>}
                               </TableCell>
-                              <TableCell className="text-sm">
+                              <TableCell className="whitespace-nowrap align-middle py-2">
                                 {line.uat_ticket || <span className="text-muted-foreground">—</span>}
                               </TableCell>
-                              <TableCell className="text-sm max-w-[160px]">
+                              <TableCell className="whitespace-nowrap align-middle py-2">
                                 {line.tec_note ? (
                                   <span className="truncate block" title={line.tec_note}>{line.tec_note}</span>
                                 ) : <span className="text-muted-foreground">—</span>}
                               </TableCell>
-                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              <TableCell className="whitespace-nowrap align-middle py-2">
                                 {new Date(line.created_at).toLocaleDateString()}
                               </TableCell>
                               {canManageLines && !isClosed && !isArchived && (
-                                <TableCell className="text-right">
+                                <TableCell className="text-right align-middle py-2">
                                   <div className="flex justify-end gap-1">
                                     <Button
                                       variant="ghost" size="icon" className="h-7 w-7"
