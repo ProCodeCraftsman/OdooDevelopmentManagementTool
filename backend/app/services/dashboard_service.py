@@ -382,6 +382,7 @@ MACRO_STATE_COLORS: dict[str, str] = {
 }
 
 PRIORITY_COLORS: dict[str, str] = {
+    "Urgent": "#dc2626",
     "Critical": "#ef4444",
     "High": "#f97316",
     "Medium": "#eab308",
@@ -452,12 +453,14 @@ def get_request_analysis(
         ms: {cat: {} for cat in categories} for ms in MACRO_STATES_ORDER
     }
     priority_data: dict[str, dict[str, dict[str, int]]] = {
-        p: {cat: {} for cat in categories} for p in PRIORITIES_ORDER
+        p: {cat: {} for cat in categories} for p in priority_names
     }
 
     for row in rows:
-        macro_state_data[row.macro_state][row.category][row.priority] = row.count
-        priority_data[row.priority][row.category][row.priority] = row.count
+        if row.macro_state in macro_state_data and row.category in macro_state_data[row.macro_state]:
+            macro_state_data[row.macro_state][row.category][row.priority] = row.count
+        if row.priority in priority_data and row.category in priority_data[row.priority]:
+            priority_data[row.priority][row.category][row.priority] = row.count
 
     def build_priority_breakdown(breakdown_dict: dict[str, int]) -> list[PriorityBreakdownItem]:
         return [

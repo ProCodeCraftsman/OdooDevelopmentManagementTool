@@ -281,21 +281,21 @@ export function RequestsCommandTable({
 
           {/* Request Number — clickable link to detail */}
           <TableCell
-            className="font-bold text-primary cursor-pointer w-[100px] whitespace-nowrap"
+            className="font-bold text-primary cursor-pointer w-[90px] whitespace-nowrap"
             onClick={() => handleNavigateToDetail(item.id)}
           >
             {item.request_number}
           </TableCell>
 
           {/* Type */}
-          <TableCell className="w-[130px]" onClick={() => handleNavigateToDetail(item.id)}>
-            <Badge variant="outline" className="text-xs font-normal truncate max-w-[120px]">
+          <TableCell className="w-[110px]" onClick={() => handleNavigateToDetail(item.id)}>
+            <Badge variant="outline" className="text-xs font-normal truncate max-w-[100px]">
               {item.request_type?.name ?? "—"}
             </Badge>
           </TableCell>
 
           {/* State — inline editor */}
-          <TableCell className="w-[160px]" onClick={(e) => e.stopPropagation()}>
+          <TableCell className="w-[150px]" onClick={(e) => e.stopPropagation()}>
             {controlParams ? (
               <InlineStateEditor
                 request={item}
@@ -307,7 +307,7 @@ export function RequestsCommandTable({
           </TableCell>
 
           {/* Priority */}
-          <TableCell className="w-[110px]" onClick={() => handleNavigateToDetail(item.id)}>
+          <TableCell className="w-[90px]" onClick={() => handleNavigateToDetail(item.id)}>
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getPriorityClass(item.priority?.level ?? 1)}`}
             >
@@ -317,30 +317,30 @@ export function RequestsCommandTable({
 
           {/* Category */}
           <TableCell
-            className="w-[130px] text-sm text-muted-foreground truncate max-w-[130px]"
+            className="w-[120px] text-sm text-muted-foreground"
             onClick={() => handleNavigateToDetail(item.id)}
           >
-            {item.functional_category?.name ?? "—"}
+            <span className="block truncate max-w-[110px]">{item.functional_category?.name ?? "—"}</span>
           </TableCell>
 
-          {/* Title */}
+          {/* Title — wraps to 2 lines so the full track is readable at a glance */}
           <TableCell
-            className="cursor-pointer"
+            className="cursor-pointer min-w-[180px]"
             onClick={() => handleNavigateToDetail(item.id)}
           >
-            <span className="block max-w-[240px] truncate text-sm font-medium" title={item.title}>
+            <span className="block text-sm font-medium line-clamp-2 break-words leading-snug" title={item.title}>
               {item.title}
             </span>
           </TableCell>
 
           {/* Assignee — inline editor */}
-          <TableCell className="w-[130px]" onClick={(e) => e.stopPropagation()}>
+          <TableCell className="w-[120px]" onClick={(e) => e.stopPropagation()}>
             <InlineAssigneeEditor request={item} />
           </TableCell>
 
           {/* Date */}
           <TableCell
-            className="w-[100px] text-sm text-muted-foreground whitespace-nowrap"
+            className="w-[90px] text-sm text-muted-foreground whitespace-nowrap"
             onClick={() => handleNavigateToDetail(item.id)}
           >
             {item.request_date
@@ -389,7 +389,7 @@ export function RequestsCommandTable({
       )}
 
       {/* Table */}
-      <div className="rounded-md border overflow-auto max-h-[calc(100vh-300px)]">
+      <div className="rounded-md border overflow-auto max-h-[calc(100vh-220px)]">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
             <TableRow>
@@ -403,14 +403,14 @@ export function RequestsCommandTable({
                   aria-label="Select all on page"
                 />
               </TableHead>
-              <TableHead className="w-[100px] font-semibold">ID</TableHead>
-              <TableHead className="w-[130px]">Type</TableHead>
-              <TableHead className="w-[160px]">State</TableHead>
-              <TableHead className="w-[110px]">Priority</TableHead>
-              <TableHead className="w-[130px]">Category</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead className="w-[130px]">Assignee</TableHead>
-              <TableHead className="w-[100px]">Date</TableHead>
+              <TableHead className="w-[90px] font-semibold">ID</TableHead>
+              <TableHead className="w-[110px]">Type</TableHead>
+              <TableHead className="w-[150px]">State</TableHead>
+              <TableHead className="w-[90px]">Priority</TableHead>
+              <TableHead className="w-[120px]">Category</TableHead>
+              <TableHead className="min-w-[180px]">Title</TableHead>
+              <TableHead className="w-[120px]">Assignee</TableHead>
+              <TableHead className="w-[90px]">Date</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>{renderTableBody()}</TableBody>

@@ -44,7 +44,7 @@ const mainNavItems = [
 
 const drNavItems = [
   { title: "Dev Requests (DR)", href: "/development-requests", icon: ClipboardList },
-  { title: "DR Lines", href: "/development-requests/lines", icon: FileStack },
+  { title: "DR Module Lines", href: "/development-requests/lines", icon: FileStack },
 ];
 
 const serverEnvNavItems = [

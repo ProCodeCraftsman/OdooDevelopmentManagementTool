@@ -194,12 +194,16 @@ class DevelopmentRequestRepository(BaseRepository[DevelopmentRequest]):
         group_by: Optional[str] = None,
         state_category: Optional[str] = None,
     ) -> Tuple[List[DevelopmentRequest], int, Optional[List[Dict]]]:
+        # Use selectinload to avoid JOIN conflicts when group_by adds explicit joins for ordering.
+        # joinedload would add LEFT JOINs to the main query, causing ambiguous ORDER BY when
+        # the same table is also joined explicitly for group-by sorting (producing interspersed
+        # results and duplicate group headers on the frontend).
         query = self.db.query(DevelopmentRequest).options(
-            joinedload(DevelopmentRequest.request_type),
-            joinedload(DevelopmentRequest.functional_category),
-            joinedload(DevelopmentRequest.request_state),
-            joinedload(DevelopmentRequest.priority),
-            joinedload(DevelopmentRequest.assigned_developer),
+            selectinload(DevelopmentRequest.request_type),
+            selectinload(DevelopmentRequest.functional_category),
+            selectinload(DevelopmentRequest.request_state),
+            selectinload(DevelopmentRequest.priority),
+            selectinload(DevelopmentRequest.assigned_developer),
         )
 
         query = self._apply_filters(

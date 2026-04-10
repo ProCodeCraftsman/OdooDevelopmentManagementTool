@@ -95,6 +95,7 @@ Legacy/environments.json
 .claude/
 # Legacy (old code)
 Legacy/
+Data/
 
 # Testing
 .coverage
