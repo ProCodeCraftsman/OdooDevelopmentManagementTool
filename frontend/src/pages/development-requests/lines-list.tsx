@@ -76,6 +76,11 @@ export function DevelopmentRequestLinesPage() {
     localStorage.setItem("dr-lines-collapsed-groups", JSON.stringify([...collapsedGroups]));
   }, [collapsedGroups]);
 
+  // Reset collapsed groups when group_by changes
+  useEffect(() => {
+    setCollapsedGroups(new Set());
+  }, [filters.group_by]);
+
   // Export loading
   const [isExporting, setIsExporting] = useState(false);
 
@@ -203,7 +208,10 @@ export function DevelopmentRequestLinesPage() {
         if (key !== lastGroupKey) {
           lastGroupKey = key;
           const groupInfo = groups.find((g) => g.key === key);
-          const count = groupInfo?.count ?? items.filter((r) => getGroupKey(r, filters.group_by!) === key).length;
+          const isCurrentPageFull = totalRecords <= items.length;
+          const count = isCurrentPageFull 
+            ? (groupInfo?.count ?? items.filter((r) => getGroupKey(r, filters.group_by!) === key).length)
+            : items.filter((r) => getGroupKey(r, filters.group_by!) === key).length;
           const collapsed = collapsedGroups.has(key);
 
           rows.push(

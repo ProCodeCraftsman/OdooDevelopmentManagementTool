@@ -134,14 +134,23 @@ export function RequestsCommandTable({
     localStorage.setItem("dr-collapsed-groups", JSON.stringify([...collapsedGroups]));
   }, [collapsedGroups]);
 
+  // Reset collapsed groups when group configuration changes
+  useEffect(() => {
+    if (!groups?.length) return;
+    setCollapsedGroups((prev) => {
+      const currentKeys = new Set(groups.map((g) => g.key));
+      const filtered = new Set([...prev].filter((k) => currentKeys.has(k)));
+      return filtered.size === prev.size ? prev : filtered;
+    });
+  }, [groups, groupBy]);
+
   // Memoized group header computation
-  // BUG FIX: Iterate over groups array (which has unique keys from API), not data items
+  // FIX: Always use groups array (API-provided) with current collapsed state
   const groupHeaders = useMemo(() => {
     if (!groupBy || !groups?.length) {
       return [];
     }
 
-    // FIX: Use the groups array directly (contains unique keys from API) instead of deriving from data
     return groups.map((g) => ({
       key: g.key,
       label: getGroupDisplayLabel(g.key, groupBy),
@@ -292,9 +301,12 @@ export function RequestsCommandTable({
         }
       }
     } else if (groupBy && groups?.length) {
-      // Fallback: Use groups array when groupHeaders is empty but groups exist
+      // FIX: Use groupHeaders for consistency - ensures same collapsed check everywhere
       let dataIndex = 0;
       for (const group of groups) {
+        const header = groupHeaders.find((h) => h.key === group.key);
+        const isCollapsed = header?.collapsed ?? collapsedGroups.has(group.key);
+
         rows.push(
           <TableRow
             key={`group-${group.key}`}
@@ -303,7 +315,7 @@ export function RequestsCommandTable({
           >
             <TableCell colSpan={COLS} className="py-2 font-medium text-sm">
               <div className="flex items-center gap-2">
-                {collapsedGroups.has(group.key) ? (
+                {isCollapsed ? (
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 ) : (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -317,8 +329,8 @@ export function RequestsCommandTable({
           </TableRow>
         );
 
-        // Add data rows for this group
-        if (!collapsedGroups.has(group.key)) {
+        // Add data rows for this group (if not collapsed)
+        if (!isCollapsed) {
           while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === group.key) {
             rows.push(renderDataRow(data[dataIndex]));
             dataIndex++;
