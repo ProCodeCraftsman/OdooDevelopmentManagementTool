@@ -74,7 +74,7 @@ function DefaultTooltip({ active, payload }: SpiderChartTooltipPayload) {
   );
 }
 
-export function getNiceScale(
+function getNiceScale(
   maxValue: number,
   tickCount: number = 5
 ): { domainMax: number; ticks: number[] } {
@@ -205,21 +205,4 @@ export function SpiderChart({
       </ResponsiveContainer>
     </div>
   );
-}
-
-export function getDefaultColors(count: number): string[] {
-  const defaultPalette = [
-    "#3b82f6", // Blue
-    "#22c55e", // Green
-    "#f97316", // Orange
-    "#8b5cf6", // Purple
-    "#ec4899", // Pink
-    "#06b6d4", // Cyan
-    "#eab308", // Yellow
-    "#ef4444", // Red
-    "#64748b", // Slate
-    "#14b8a6", // Teal
-  ];
-  
-  return Array.from({ length: count }, (_, i) => defaultPalette[i % defaultPalette.length]);
 }

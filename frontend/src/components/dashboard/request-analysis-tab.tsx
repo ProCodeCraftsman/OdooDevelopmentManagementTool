@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Filter } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,19 +89,13 @@ function EmptyCharts() {
 }
 
 export function RequestAnalysisTab() {
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[] | null>(null);
 
   const { data, isLoading, isError } = useRequestAnalysis(
-    selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined
+    selectedCategoryIds ?? undefined
   );
 
-  useEffect(() => {
-    if (data?.functional_categories && !hasInitialized) {
-      setSelectedCategoryIds(data.functional_categories.map((c) => c.id));
-      setHasInitialized(true);
-    }
-  }, [data, hasInitialized]);
+  const effectiveSelectedCategoryIds = selectedCategoryIds ?? data?.functional_categories.map((c) => c.id) ?? [];
 
   if (isError) {
     return (
@@ -133,7 +127,7 @@ export function RequestAnalysisTab() {
           {data && (
             <CategoryFilter
               categories={data.functional_categories}
-              selectedIds={selectedCategoryIds}
+              selectedIds={effectiveSelectedCategoryIds}
               onChange={setSelectedCategoryIds}
             />
           )}

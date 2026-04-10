@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, Pencil, Trash2, Shield } from "lucide-react";
@@ -78,6 +78,12 @@ export function SettingsRolesPage() {
       permissions: [],
       priority: 50,
     },
+  });
+
+  const selectedPermissions = useWatch({
+    control: form.control,
+    name: "permissions",
+    defaultValue: [],
   });
 
   const onSubmit = async (data: RoleFormData) => {
@@ -259,8 +265,7 @@ export function SettingsRolesPage() {
                     <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">{group}</p>
                     <div className="grid grid-cols-2 gap-1">
                       {PERMISSION_OPTIONS.filter((o) => o.group === group).map((opt) => {
-                        const selected = form.watch("permissions") ?? [];
-                        const isSelected = selected.includes(opt.key);
+                        const isSelected = selectedPermissions.includes(opt.key);
                         return (
                           <label
                             key={opt.key}

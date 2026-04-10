@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { Fragment, useState, useCallback, useMemo, useEffect } from "react";
 import { useDevelopmentRequestLines } from "@/hooks/useDevelopmentRequests";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,8 @@ const UAT_STATUS_COLORS: Record<string, string> = {
   approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
   rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
 };
+
+const COLS = 8;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -93,9 +95,9 @@ export function DevelopmentRequestLinesPage() {
 
   const { data, isLoading } = useDevelopmentRequestLines(apiFilters, page, pageSize);
 
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data]);
   const totalRecords = data?.total ?? 0;
-  const groups: GroupInfo[] = data?.groups ?? [];
+  const groups = useMemo<GroupInfo[]>(() => data?.groups ?? [], [data]);
 
   // ---------------------------------------------------------------------------
   // Filter / page change
@@ -181,7 +183,11 @@ export function DevelopmentRequestLinesPage() {
   const toggleGroup = useCallback((key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
       return next;
     });
   }, []);
@@ -196,102 +202,129 @@ export function DevelopmentRequestLinesPage() {
   // Table body builder
   // ---------------------------------------------------------------------------
 
-  const COLS = 8; // checkbox + request + module + version + md5 + uat_status + uat_ticket + tec_note
+  const groupedSections = useMemo(() => {
+    if (!filters.group_by) {
+      return [];
+    }
 
-  const renderTableBody = () => {
-    let lastGroupKey: string | null = null;
-    const rows: React.ReactNode[] = [];
-
-    items.forEach((item) => {
-      if (filters.group_by) {
-        const key = getGroupKey(item, filters.group_by);
-        if (key !== lastGroupKey) {
-          lastGroupKey = key;
-          const groupInfo = groups.find((g) => g.key === key);
-          const isCurrentPageFull = totalRecords <= items.length;
-          const count = isCurrentPageFull 
-            ? (groupInfo?.count ?? items.filter((r) => getGroupKey(r, filters.group_by!) === key).length)
-            : items.filter((r) => getGroupKey(r, filters.group_by!) === key).length;
-          const collapsed = collapsedGroups.has(key);
-
-          rows.push(
-            <TableRow
-              key={`group-${key}`}
-              className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
-              onClick={() => toggleGroup(key)}
-            >
-              <TableCell colSpan={COLS} className="py-2 font-medium text-sm">
-                <div className="flex items-center gap-2">
-                  {collapsed ? (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <span>{getGroupLabel(key, filters.group_by!)}</span>
-                  <Badge variant="secondary" className="text-xs py-0 px-1.5">
-                    {count}
-                  </Badge>
-                </div>
-              </TableCell>
-            </TableRow>
-          );
-        }
-        if (collapsedGroups.has(lastGroupKey ?? "")) return;
+    const groupBy = filters.group_by;
+    const rowsByGroup = new Map<string, RequestModuleLineWithRequest[]>();
+    for (const item of items) {
+      const key = getGroupKey(item, groupBy);
+      const existingRows = rowsByGroup.get(key);
+      if (existingRows) {
+        existingRows.push(item);
+      } else {
+        rowsByGroup.set(key, [item]);
       }
+    }
 
-      const isSelected = selectedIds.has(item.id);
+    if (groups.length > 0) {
+      return groups.map((group) => ({
+        key: group.key,
+        label: getGroupLabel(group.key, groupBy),
+        count: group.count,
+        collapsed: collapsedGroups.has(group.key),
+        items: rowsByGroup.get(group.key) ?? [],
+      }));
+    }
 
-      rows.push(
-        <TableRow
-          key={item.id}
-          className={`transition-colors ${isSelected ? "bg-primary/5" : ""}`}
-          data-state={isSelected ? "selected" : undefined}
-        >
-          <TableCell className="w-10 pr-0" onClick={(e) => e.stopPropagation()}>
-            <Checkbox
-              checked={isSelected}
-              onCheckedChange={() => handleToggleRow(item.id)}
-              aria-label={`Select line ${item.id}`}
-            />
-          </TableCell>
+    return Array.from(rowsByGroup.entries()).map(([key, groupItems]) => ({
+      key,
+      label: getGroupLabel(key, groupBy),
+      count: groupItems.length,
+      collapsed: collapsedGroups.has(key),
+      items: groupItems,
+    }));
+  }, [filters.group_by, groups, items, collapsedGroups]);
 
-          <TableCell className="w-[200px]">
-            <a
-              href={`/development-requests/${item.request_id}`}
-              className="text-primary hover:underline text-sm font-medium truncate block max-w-[190px]"
-              title={item.request?.title}
+  const renderLineRow = useCallback((item: RequestModuleLineWithRequest) => {
+    const isSelected = selectedIds.has(item.id);
+
+    return (
+      <TableRow
+        key={`row-${item.id}`}
+        className={`transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+        data-state={isSelected ? "selected" : undefined}
+      >
+        <TableCell className="w-10 pr-0" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => handleToggleRow(item.id)}
+            aria-label={`Select line ${item.id}`}
+          />
+        </TableCell>
+
+        <TableCell className="w-[200px]">
+          <a
+            href={`/development-requests/${item.request_id}`}
+            className="text-primary hover:underline text-sm font-medium truncate block max-w-[190px]"
+            title={item.request?.title}
+          >
+            {item.request?.title ?? "N/A"}
+          </a>
+          <span className="text-xs text-muted-foreground">{item.request?.request_number}</span>
+        </TableCell>
+
+        <TableCell className="text-sm font-mono">{item.module_technical_name}</TableCell>
+        <TableCell className="text-sm text-muted-foreground w-[90px]">{item.module_version ?? "—"}</TableCell>
+        <TableCell className="text-xs text-muted-foreground font-mono w-[120px] truncate max-w-[120px]" title={item.module_md5_sum ?? undefined}>
+          {item.module_md5_sum ?? "—"}
+        </TableCell>
+
+        <TableCell className="w-[120px]">
+          {item.uat_status ? (
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${UAT_STATUS_COLORS[item.uat_status] ?? "bg-gray-100 text-gray-800"}`}>
+              {item.uat_status.replace("_", " ")}
+            </span>
+          ) : (
+            <span className="text-muted-foreground text-xs">—</span>
+          )}
+        </TableCell>
+
+        <TableCell className="text-sm text-muted-foreground w-[130px]">{item.uat_ticket ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate" title={item.tec_note ?? undefined}>
+          {item.tec_note ?? "—"}
+        </TableCell>
+      </TableRow>
+    );
+  }, [selectedIds, handleToggleRow]);
+
+  const tableBodyRows = useMemo(() => {
+    if (!filters.group_by) {
+      return items.map((item) => renderLineRow(item));
+    }
+
+    return groupedSections.map((section) => (
+      <Fragment key={`group-section-${section.key}`}>
+        <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableCell colSpan={COLS} className="p-0">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              onClick={() => toggleGroup(section.key)}
+              aria-expanded={!section.collapsed}
             >
-              {item.request?.title ?? "N/A"}
-            </a>
-            <span className="text-xs text-muted-foreground">{item.request?.request_number}</span>
-          </TableCell>
-
-          <TableCell className="text-sm font-mono">{item.module_technical_name}</TableCell>
-          <TableCell className="text-sm text-muted-foreground w-[90px]">{item.module_version ?? "—"}</TableCell>
-          <TableCell className="text-xs text-muted-foreground font-mono w-[120px] truncate max-w-[120px]" title={item.module_md5_sum ?? undefined}>
-            {item.module_md5_sum ?? "—"}
-          </TableCell>
-
-          <TableCell className="w-[120px]">
-            {item.uat_status ? (
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${UAT_STATUS_COLORS[item.uat_status] ?? "bg-gray-100 text-gray-800"}`}>
-                {item.uat_status.replace("_", " ")}
-              </span>
-            ) : (
-              <span className="text-muted-foreground text-xs">—</span>
-            )}
-          </TableCell>
-
-          <TableCell className="text-sm text-muted-foreground w-[130px]">{item.uat_ticket ?? "—"}</TableCell>
-          <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate" title={item.tec_note ?? undefined}>
-            {item.tec_note ?? "—"}
+              {section.collapsed ? (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span>{section.label}</span>
+              <Badge variant="secondary" className="text-xs py-0 px-1.5">
+                {section.count}
+              </Badge>
+            </button>
           </TableCell>
         </TableRow>
-      );
-    });
-
-    return rows;
-  };
+        {!section.collapsed && section.items.map((item) => (
+          <Fragment key={`group-row-${section.key}-${item.id}`}>
+            {renderLineRow(item)}
+          </Fragment>
+        ))}
+      </Fragment>
+    ));
+  }, [filters.group_by, groupedSections, items, renderLineRow, toggleGroup]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -426,7 +459,7 @@ export function DevelopmentRequestLinesPage() {
                 <TableHead>Tech Note</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>{renderTableBody()}</TableBody>
+            <TableBody>{tableBodyRows}</TableBody>
           </Table>
         </div>
       )}

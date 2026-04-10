@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { RefreshCw, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTriggerSync } from "@/hooks/useSync";
@@ -18,19 +18,25 @@ export function SyncButton({ environmentName }: { environmentName: string }) {
 
   const isRunning = syncStatus?.status === "running" || syncStatus?.status === "pending";
 
-  const clearSyncState = () => {
+  const clearSyncState = useCallback(() => {
     setCurrentJobId(null);
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
-  };
+  }, []);
+
+  const scheduleClearSyncState = useCallback(() => {
+    setTimeout(() => {
+      clearSyncState();
+    }, 0);
+  }, [clearSyncState]);
 
   // Completed or failed
   useEffect(() => {
     if (syncStatus?.status === "completed" || syncStatus?.status === "failed") {
       toast.dismiss(`sync-${environmentName}`);
-      clearSyncState();
+      scheduleClearSyncState();
 
       queryClient.invalidateQueries({ queryKey: environmentKeys.modules(environmentName) });
       queryClient.invalidateQueries({ queryKey: environmentKeys.dependencies(environmentName) });
@@ -46,20 +52,18 @@ export function SyncButton({ environmentName }: { environmentName: string }) {
         });
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncStatus?.status, environmentName, queryClient]);
+  }, [syncStatus, environmentName, queryClient, scheduleClearSyncState]);
 
   // Query error (e.g. job record not found — 404)
   useEffect(() => {
     if (syncError && currentJobId) {
       toast.dismiss(`sync-${environmentName}`);
-      clearSyncState();
+      scheduleClearSyncState();
       toast.error(`${environmentName} sync status unavailable`, {
         description: "Lost track of sync job. Check server logs.",
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncError, currentJobId, environmentName]);
+  }, [syncError, currentJobId, environmentName, scheduleClearSyncState]);
 
   // Cleanup timeout on unmount
   useEffect(() => {

@@ -12,7 +12,7 @@
  *  - Click-through to detail view (non-interactive cells only)
  */
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { Fragment, useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +65,8 @@ function getGroupDisplayLabel(key: string, groupBy: GroupByOption): string {
   if (key === "_none") return "None";
   return key;
 }
+
+const COLS = 9;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -129,35 +131,19 @@ export function RequestsCommandTable({
     return stored ? new Set(JSON.parse(stored)) : new Set();
   });
 
-  // Sync to localStorage when changed
-  useEffect(() => {
-    localStorage.setItem("dr-collapsed-groups", JSON.stringify([...collapsedGroups]));
-  }, [collapsedGroups]);
-
-  // Reset collapsed groups when group configuration changes
-  useEffect(() => {
-    if (!groups?.length) return;
-    setCollapsedGroups((prev) => {
-      const currentKeys = new Set(groups.map((g) => g.key));
-      const filtered = new Set([...prev].filter((k) => currentKeys.has(k)));
-      return filtered.size === prev.size ? prev : filtered;
-    });
-  }, [groups, groupBy]);
-
-  // Memoized group header computation
-  // FIX: Always use groups array (API-provided) with current collapsed state
-  const groupHeaders = useMemo(() => {
+  const activeCollapsedGroups = useMemo(() => {
     if (!groupBy || !groups?.length) {
-      return [];
+      return collapsedGroups;
     }
 
-    return groups.map((g) => ({
-      key: g.key,
-      label: getGroupDisplayLabel(g.key, groupBy),
-      count: g.count,
-      collapsed: collapsedGroups.has(g.key),
-    }));
-  }, [groupBy, groups, collapsedGroups]);
+    const currentKeys = new Set(groups.map((group) => group.key));
+    return new Set([...collapsedGroups].filter((key) => currentKeys.has(key)));
+  }, [collapsedGroups, groupBy, groups]);
+
+  // Sync to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem("dr-collapsed-groups", JSON.stringify([...activeCollapsedGroups]));
+  }, [activeCollapsedGroups]);
 
   const handleNavigateToDetail = useCallback((id: number) => {
     const siblingIds = data.map((item) => item.id);
@@ -175,6 +161,41 @@ export function RequestsCommandTable({
       return next;
     });
   }, []);
+
+  const groupedSections = useMemo(() => {
+    if (!groupBy) {
+      return [];
+    }
+
+    const rowsByGroup = new Map<string, DevelopmentRequest[]>();
+    for (const item of data) {
+      const key = getGroupKeyForItem(item, groupBy);
+      const existingRows = rowsByGroup.get(key);
+      if (existingRows) {
+        existingRows.push(item);
+      } else {
+        rowsByGroup.set(key, [item]);
+      }
+    }
+
+    if (groups?.length) {
+      return groups.map((group) => ({
+        key: group.key,
+        label: getGroupDisplayLabel(group.key, groupBy),
+        count: group.count,
+        collapsed: activeCollapsedGroups.has(group.key),
+        items: rowsByGroup.get(group.key) ?? [],
+      }));
+    }
+
+    return Array.from(rowsByGroup.entries()).map(([key, groupItems]) => ({
+      key,
+      label: getGroupDisplayLabel(key, groupBy),
+      count: groupItems.length,
+      collapsed: activeCollapsedGroups.has(key),
+      items: groupItems,
+    }));
+  }, [groupBy, groups, data, activeCollapsedGroups]);
 
   const allOnPageSelected = data.length > 0 && data.every((r) => selectedIds.has(r.id));
   const someOnPageSelected = data.some((r) => selectedIds.has(r.id)) && !allOnPageSelected;
@@ -203,7 +224,112 @@ export function RequestsCommandTable({
     onClearAllRecords();
   }, [selectedIds, onSelectionChange, onClearAllRecords]);
 
-  const COLS = 9; // checkbox + id + type + state + priority + category + title + assignee + date
+  const renderRequestRow = useCallback((item: DevelopmentRequest) => {
+    const isSelected = selectedIds.has(item.id);
+
+    return (
+      <TableRow
+        key={`request-row-${item.id}`}
+        className={`group transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+        data-state={isSelected ? "selected" : undefined}
+      >
+        <TableCell className="w-10 pr-0" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => handleToggleRow(item.id)}
+            aria-label={`Select ${item.request_number}`}
+          />
+        </TableCell>
+        <TableCell
+          className="font-bold text-primary cursor-pointer w-[90px] whitespace-nowrap"
+          onClick={() => handleNavigateToDetail(item.id)}
+        >
+          {item.request_number}
+        </TableCell>
+        <TableCell className="w-[110px]" onClick={() => handleNavigateToDetail(item.id)}>
+          <Badge variant="outline" className="text-xs font-normal truncate max-w-[100px]">
+            {item.request_type?.name ?? "—"}
+          </Badge>
+        </TableCell>
+        <TableCell className="w-[150px]" onClick={(e) => e.stopPropagation()}>
+          {controlParams ? (
+            <InlineStateEditor
+              request={item}
+              availableStates={controlParams.request_states}
+            />
+          ) : (
+            <Badge variant="outline">{item.request_state?.name ?? "—"}</Badge>
+          )}
+        </TableCell>
+        <TableCell className="w-[90px]" onClick={() => handleNavigateToDetail(item.id)}>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getPriorityClass(item.priority?.level ?? 1)}`}
+          >
+            {item.priority?.name ?? "—"}
+          </span>
+        </TableCell>
+        <TableCell
+          className="w-[120px] text-sm text-muted-foreground"
+          onClick={() => handleNavigateToDetail(item.id)}
+        >
+          <span className="block truncate max-w-[110px]">{item.functional_category?.name ?? "—"}</span>
+        </TableCell>
+        <TableCell
+          className="cursor-pointer min-w-[180px]"
+          onClick={() => handleNavigateToDetail(item.id)}
+        >
+          <span className="block text-sm font-medium line-clamp-2 break-words leading-snug" title={item.title}>
+            {item.title}
+          </span>
+        </TableCell>
+        <TableCell className="w-[120px]" onClick={(e) => e.stopPropagation()}>
+          <InlineAssigneeEditor request={item} />
+        </TableCell>
+        <TableCell
+          className="w-[90px] text-sm text-muted-foreground whitespace-nowrap"
+          onClick={() => handleNavigateToDetail(item.id)}
+        >
+          {item.request_date ? new Date(item.request_date).toLocaleDateString() : "—"}
+        </TableCell>
+      </TableRow>
+    );
+  }, [selectedIds, handleNavigateToDetail, controlParams, handleToggleRow]);
+
+  const tableBodyRows = useMemo(() => {
+    if (!groupBy) {
+      return data.map((item) => renderRequestRow(item));
+    }
+
+    return groupedSections.map((section) => (
+      <Fragment key={`group-section-${section.key}`}>
+        <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableCell colSpan={COLS} className="p-0">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              onClick={() => toggleGroup(section.key)}
+              aria-expanded={!section.collapsed}
+            >
+              {section.collapsed ? (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+              <span>{section.label}</span>
+              <Badge variant="secondary" className="text-xs py-0 px-1.5">
+                {section.count}
+              </Badge>
+            </button>
+          </TableCell>
+        </TableRow>
+        {!section.collapsed && section.items.map((item) => (
+          <Fragment key={`group-row-${section.key}-${item.id}`}>
+            {renderRequestRow(item)}
+          </Fragment>
+        ))}
+      </Fragment>
+    ));
+  }, [groupBy, data, groupedSections, renderRequestRow, toggleGroup]);
 
   // ---------------------------------------------------------------------------
   // Loading skeleton
@@ -251,196 +377,6 @@ export function RequestsCommandTable({
       </div>
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // Track group rendering to inject headers (fallback if not using memoized)
-  // ---------------------------------------------------------------------------
-
-  // Use memoized groupHeaders when available, otherwise compute inline
-  const renderTableBody = () => {
-    const rows: React.ReactNode[] = [];
-
-    if (groupBy && groupHeaders.length > 0) {
-      // Use pre-computed group headers
-      let dataIndex = 0;
-      for (const header of groupHeaders) {
-        // Add group header row
-        rows.push(
-          <TableRow
-            key={`group-${header.key}`}
-            className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
-            onClick={() => toggleGroup(header.key)}
-          >
-            <TableCell colSpan={COLS} className="py-2 font-medium text-sm">
-              <div className="flex items-center gap-2">
-                {header.collapsed ? (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                )}
-                <span>{header.label}</span>
-                <Badge variant="secondary" className="text-xs py-0 px-1.5">
-                  {header.count}
-                </Badge>
-              </div>
-            </TableCell>
-          </TableRow>
-        );
-
-        // Add data rows for this group (if not collapsed)
-        if (!header.collapsed) {
-          while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === header.key) {
-            rows.push(renderDataRow(data[dataIndex]));
-            dataIndex++;
-          }
-        } else {
-          // Skip to next group
-          while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === header.key) {
-            dataIndex++;
-          }
-        }
-      }
-    } else if (groupBy && groups?.length) {
-      // FIX: Use groupHeaders for consistency - ensures same collapsed check everywhere
-      let dataIndex = 0;
-      for (const group of groups) {
-        const header = groupHeaders.find((h) => h.key === group.key);
-        const isCollapsed = header?.collapsed ?? collapsedGroups.has(group.key);
-
-        rows.push(
-          <TableRow
-            key={`group-${group.key}`}
-            className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
-            onClick={() => toggleGroup(group.key)}
-          >
-            <TableCell colSpan={COLS} className="py-2 font-medium text-sm">
-              <div className="flex items-center gap-2">
-                {isCollapsed ? (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                )}
-                <span>{getGroupDisplayLabel(group.key, groupBy)}</span>
-                <Badge variant="secondary" className="text-xs py-0 px-1.5">
-                  {group.count}
-                </Badge>
-              </div>
-            </TableCell>
-          </TableRow>
-        );
-
-        // Add data rows for this group (if not collapsed)
-        if (!isCollapsed) {
-          while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === group.key) {
-            rows.push(renderDataRow(data[dataIndex]));
-            dataIndex++;
-          }
-        } else {
-          while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === group.key) {
-            dataIndex++;
-          }
-        }
-      }
-    } else {
-      // No grouping - just render data rows
-      for (const item of data) {
-        rows.push(renderDataRow(item));
-      }
-    }
-
-    return rows;
-  };
-
-  // Separate row renderer for cleaner code
-  const renderDataRow = (item: DevelopmentRequest): React.ReactNode => {
-    const isSelected = selectedIds.has(item.id);
-
-    return (
-      <TableRow
-        key={item.id}
-        className={`group transition-colors ${isSelected ? "bg-primary/5" : ""}`}
-        data-state={isSelected ? "selected" : undefined}
-      >
-        {/* Checkbox */}
-        <TableCell className="w-10 pr-0" onClick={(e) => e.stopPropagation()}>
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={() => handleToggleRow(item.id)}
-            aria-label={`Select ${item.request_number}`}
-          />
-        </TableCell>
-
-        {/* Request Number — clickable link to detail */}
-        <TableCell
-          className="font-bold text-primary cursor-pointer w-[90px] whitespace-nowrap"
-          onClick={() => handleNavigateToDetail(item.id)}
-        >
-          {item.request_number}
-        </TableCell>
-
-        {/* Type */}
-        <TableCell className="w-[110px]" onClick={() => handleNavigateToDetail(item.id)}>
-          <Badge variant="outline" className="text-xs font-normal truncate max-w-[100px]">
-            {item.request_type?.name ?? "—"}
-          </Badge>
-        </TableCell>
-
-        {/* State — inline editor */}
-        <TableCell className="w-[150px]" onClick={(e) => e.stopPropagation()}>
-          {controlParams ? (
-            <InlineStateEditor
-              request={item}
-              availableStates={controlParams.request_states}
-            />
-          ) : (
-            <Badge variant="outline">{item.request_state?.name ?? "—"}</Badge>
-          )}
-        </TableCell>
-
-        {/* Priority */}
-        <TableCell className="w-[90px]" onClick={() => handleNavigateToDetail(item.id)}>
-          <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getPriorityClass(item.priority?.level ?? 1)}`}
-          >
-            {item.priority?.name ?? "—"}
-          </span>
-        </TableCell>
-
-        {/* Category */}
-        <TableCell
-          className="w-[120px] text-sm text-muted-foreground"
-          onClick={() => handleNavigateToDetail(item.id)}
-        >
-          <span className="block truncate max-w-[110px]">{item.functional_category?.name ?? "—"}</span>
-        </TableCell>
-
-        {/* Title — wraps to 2 lines so the full track is readable at a glance */}
-        <TableCell
-          className="cursor-pointer min-w-[180px]"
-          onClick={() => handleNavigateToDetail(item.id)}
-        >
-          <span className="block text-sm font-medium line-clamp-2 break-words leading-snug" title={item.title}>
-            {item.title}
-          </span>
-        </TableCell>
-
-        {/* Assignee — inline editor */}
-        <TableCell className="w-[120px]" onClick={(e) => e.stopPropagation()}>
-          <InlineAssigneeEditor request={item} />
-        </TableCell>
-
-        {/* Date */}
-        <TableCell
-          className="w-[90px] text-sm text-muted-foreground whitespace-nowrap"
-          onClick={() => handleNavigateToDetail(item.id)}
-        >
-          {item.request_date
-            ? new Date(item.request_date).toLocaleDateString()
-            : "—"}
-        </TableCell>
-      </TableRow>
-    );
-  };
 
   // ---------------------------------------------------------------------------
   // Render
@@ -501,7 +437,7 @@ export function RequestsCommandTable({
               <TableHead className="w-[90px]">Date</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>{renderTableBody()}</TableBody>
+          <TableBody>{tableBodyRows}</TableBody>
         </Table>
       </div>
 

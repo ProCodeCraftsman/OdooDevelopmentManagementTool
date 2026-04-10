@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -59,7 +59,7 @@ export function ReleasePlanFormPage() {
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
@@ -88,6 +88,12 @@ export function ReleasePlanFormPage() {
       });
     }
   }, [plan, isEditing, reset]);
+
+  const sourceEnvironmentId = useWatch({ control, name: "source_environment_id" });
+  const targetEnvironmentId = useWatch({ control, name: "target_environment_id" });
+  const stateId = useWatch({ control, name: "state_id" });
+  const approvedById = useWatch({ control, name: "approved_by_id" });
+  const deployedById = useWatch({ control, name: "deployed_by_id" });
 
   const onSubmit = async (formData: FormData) => {
     try {
@@ -163,7 +169,7 @@ export function ReleasePlanFormPage() {
                   Source Environment <span className="text-destructive">*</span>
                 </Label>
                 <Select
-                  value={watch("source_environment_id")?.toString() ?? ""}
+                  value={sourceEnvironmentId?.toString() ?? ""}
                   onValueChange={(v) => setValue("source_environment_id", parseInt(v))}
                 >
                   <SelectTrigger>
@@ -188,7 +194,7 @@ export function ReleasePlanFormPage() {
                   Target Environment <span className="text-destructive">*</span>
                 </Label>
                 <Select
-                  value={watch("target_environment_id")?.toString() ?? ""}
+                  value={targetEnvironmentId?.toString() ?? ""}
                   onValueChange={(v) => setValue("target_environment_id", parseInt(v))}
                 >
                   <SelectTrigger>
@@ -214,7 +220,7 @@ export function ReleasePlanFormPage() {
               <div className="space-y-1.5">
                 <Label>State</Label>
                 <Select
-                  value={watch("state_id")?.toString() ?? ""}
+                  value={stateId?.toString() ?? ""}
                   onValueChange={(v) => setValue("state_id", parseInt(v))}
                 >
                   <SelectTrigger>
@@ -247,7 +253,7 @@ export function ReleasePlanFormPage() {
               <div className="space-y-1.5">
                 <Label>Approved By</Label>
                 <Select
-                  value={watch("approved_by_id")?.toString() ?? "none"}
+                  value={approvedById?.toString() ?? "none"}
                   onValueChange={(v) =>
                     setValue("approved_by_id", v === "none" ? undefined : parseInt(v))
                   }
@@ -269,7 +275,7 @@ export function ReleasePlanFormPage() {
               <div className="space-y-1.5">
                 <Label>Deployed By (Server Admin)</Label>
                 <Select
-                  value={watch("deployed_by_id")?.toString() ?? "none"}
+                  value={deployedById?.toString() ?? "none"}
                   onValueChange={(v) =>
                     setValue("deployed_by_id", v === "none" ? undefined : parseInt(v))
                   }

@@ -1,6 +1,6 @@
 import { useNavigate, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -46,12 +46,17 @@ export function DevelopmentRequestsFormPage() {
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: { description: "" },
   });
+
+  const requestTypeId = useWatch({ control, name: "request_type_id" });
+  const functionalCategoryId = useWatch({ control, name: "functional_category_id" });
+  const priorityId = useWatch({ control, name: "priority_id" });
+  const assignedDeveloperId = useWatch({ control, name: "assigned_developer_id" });
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -114,7 +119,7 @@ export function DevelopmentRequestsFormPage() {
               <div className="space-y-2">
                 <Label htmlFor="request_type_id">Request Type *</Label>
                 <Select
-                  value={watch("request_type_id")?.toString() || ""}
+                  value={requestTypeId?.toString() || ""}
                   onValueChange={(v) => setValue("request_type_id", parseInt(v))}
                 >
                   <SelectTrigger id="request_type_id">
@@ -136,7 +141,7 @@ export function DevelopmentRequestsFormPage() {
               <div className="space-y-2">
                 <Label htmlFor="functional_category_id">Functional Category *</Label>
                 <Select
-                  value={watch("functional_category_id")?.toString() || ""}
+                  value={functionalCategoryId?.toString() || ""}
                   onValueChange={(v) => setValue("functional_category_id", parseInt(v))}
                 >
                   <SelectTrigger id="functional_category_id">
@@ -160,7 +165,7 @@ export function DevelopmentRequestsFormPage() {
               <div className="space-y-2">
                 <Label htmlFor="priority_id">Priority *</Label>
                 <Select
-                  value={watch("priority_id")?.toString() || ""}
+                  value={priorityId?.toString() || ""}
                   onValueChange={(v) => setValue("priority_id", parseInt(v))}
                 >
                   <SelectTrigger id="priority_id">
@@ -182,7 +187,7 @@ export function DevelopmentRequestsFormPage() {
               <div className="space-y-2">
                 <Label htmlFor="assigned_developer_id">Assignee</Label>
                 <Select
-                  value={watch("assigned_developer_id")?.toString() || "none"}
+                  value={assignedDeveloperId?.toString() || "none"}
                   onValueChange={(v) =>
                     setValue("assigned_developer_id", v === "none" ? undefined : parseInt(v))
                   }

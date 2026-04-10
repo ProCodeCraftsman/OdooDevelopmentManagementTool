@@ -51,7 +51,7 @@ export function DrLinesQueryBar({ filters, onChange }: Props) {
     }
   };
 
-  const toggleFilterValue = (field: FilterField, value: string, _label: string) => {
+  const toggleFilterValue = (field: FilterField, value: string) => {
     if (field === "module_names") {
       const current = filters.module_names ? filters.module_names.split(",") : [];
       if (current.includes(value)) {
@@ -158,7 +158,7 @@ export function DrLinesQueryBar({ filters, onChange }: Props) {
                       <button
                         key={opt.id}
                         className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent flex items-center gap-2 ${isActive ? "font-medium" : ""}`}
-                        onClick={() => toggleFilterValue(activeAddField, opt.id, opt.label)}
+                        onClick={() => toggleFilterValue(activeAddField, opt.id)}
                       >
                         <span
                           className={`h-3 w-3 rounded border flex-shrink-0 ${isActive ? "bg-primary border-primary" : "border-muted-foreground"}`}
