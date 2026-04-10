@@ -12,7 +12,7 @@
  *  - Click-through to detail view (non-interactive cells only)
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -50,18 +50,19 @@ function getPriorityClass(level: number): string {
 function getGroupKeyForItem(item: DevelopmentRequest, groupBy: GroupByOption): string {
   switch (groupBy) {
     case "state_category":
-      return item.request_state?.category ?? "";
+      return item.request_state?.category ?? "_none";
     case "assigned_developer":
       return item.assigned_developer?.username ?? "_unassigned";
     case "priority":
-      return item.priority?.name ?? "";
+      return item.priority?.name ?? "_none";
     case "functional_category":
-      return item.functional_category?.name ?? "";
+      return item.functional_category?.name ?? "_none";
   }
 }
 
 function getGroupDisplayLabel(key: string, groupBy: GroupByOption): string {
   if (groupBy === "assigned_developer" && key === "_unassigned") return "Unassigned";
+  if (key === "_none") return "None";
   return key;
 }
 
@@ -120,7 +121,34 @@ export function RequestsCommandTable({
   emptyState,
 }: Props) {
   const navigate = useNavigate();
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  
+  // Persist collapsed groups to localStorage
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    const stored = localStorage.getItem("dr-collapsed-groups");
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
+
+  // Sync to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem("dr-collapsed-groups", JSON.stringify([...collapsedGroups]));
+  }, [collapsedGroups]);
+
+  // Memoized group header computation
+  // BUG FIX: Iterate over groups array (which has unique keys from API), not data items
+  const groupHeaders = useMemo(() => {
+    if (!groupBy || !groups?.length) {
+      return [];
+    }
+
+    // FIX: Use the groups array directly (contains unique keys from API) instead of deriving from data
+    return groups.map((g) => ({
+      key: g.key,
+      label: getGroupDisplayLabel(g.key, groupBy),
+      count: g.count,
+      collapsed: collapsedGroups.has(g.key),
+    }));
+  }, [groupBy, groups, collapsedGroups]);
 
   const handleNavigateToDetail = useCallback((id: number) => {
     const siblingIds = data.map((item) => item.id);
@@ -130,7 +158,11 @@ export function RequestsCommandTable({
   const toggleGroup = useCallback((key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
       return next;
     });
   }, []);
@@ -138,9 +170,8 @@ export function RequestsCommandTable({
   const allOnPageSelected = data.length > 0 && data.every((r) => selectedIds.has(r.id));
   const someOnPageSelected = data.some((r) => selectedIds.has(r.id)) && !allOnPageSelected;
 
-  const handleSelectPage = () => {
+  const handleSelectPage = useCallback(() => {
     if (allOnPageSelected) {
-      // Deselect this page
       const next = new Set(selectedIds);
       data.forEach((r) => next.delete(r.id));
       onSelectionChange(next);
@@ -150,26 +181,20 @@ export function RequestsCommandTable({
       data.forEach((r) => next.add(r.id));
       onSelectionChange(next);
     }
-  };
+  }, [allOnPageSelected, selectedIds, data, onSelectionChange, onClearAllRecords]);
 
-  const handleToggleRow = (id: number) => {
+  const handleToggleRow = useCallback((id: number) => {
     const next = new Set(selectedIds);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
     onSelectionChange(next);
     onClearAllRecords();
-  };
+  }, [selectedIds, onSelectionChange, onClearAllRecords]);
 
   const COLS = 9; // checkbox + id + type + state + priority + category + title + assignee + date
-
-  // ---------------------------------------------------------------------------
-  // Build rows with optional group headers injected
-  // ---------------------------------------------------------------------------
-  const buildRows = () => {
-    if (!groupBy || !data.length) return data;
-    return data; // group headers injected in JSX below
-  };
-
-  buildRows(); // keep linter happy
 
   // ---------------------------------------------------------------------------
   // Loading skeleton
@@ -219,139 +244,190 @@ export function RequestsCommandTable({
   }
 
   // ---------------------------------------------------------------------------
-  // Track group rendering to inject headers
+  // Track group rendering to inject headers (fallback if not using memoized)
   // ---------------------------------------------------------------------------
-  let lastGroupKey: string | null = null;
 
+  // Use memoized groupHeaders when available, otherwise compute inline
   const renderTableBody = () => {
     const rows: React.ReactNode[] = [];
 
-    data.forEach((item) => {
-      // Group header injection
-      if (groupBy) {
-        const key = getGroupKeyForItem(item, groupBy);
-        if (key !== lastGroupKey) {
-          lastGroupKey = key;
-          const groupInfo = groups?.find((g) => g.key === key);
-          const count = groupInfo?.count ?? data.filter((r) => getGroupKeyForItem(r, groupBy) === key).length;
-          const collapsed = collapsedGroups.has(key);
+    if (groupBy && groupHeaders.length > 0) {
+      // Use pre-computed group headers
+      let dataIndex = 0;
+      for (const header of groupHeaders) {
+        // Add group header row
+        rows.push(
+          <TableRow
+            key={`group-${header.key}`}
+            className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
+            onClick={() => toggleGroup(header.key)}
+          >
+            <TableCell colSpan={COLS} className="py-2 font-medium text-sm">
+              <div className="flex items-center gap-2">
+                {header.collapsed ? (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+                <span>{header.label}</span>
+                <Badge variant="secondary" className="text-xs py-0 px-1.5">
+                  {header.count}
+                </Badge>
+              </div>
+            </TableCell>
+          </TableRow>
+        );
 
-          rows.push(
-            <TableRow
-              key={`group-${key}`}
-              className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
-              onClick={() => toggleGroup(key)}
-            >
-              <TableCell colSpan={COLS} className="py-2 font-medium text-sm">
-                <div className="flex items-center gap-2">
-                  {collapsed ? (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <span>{getGroupDisplayLabel(key, groupBy)}</span>
-                  <Badge variant="secondary" className="text-xs py-0 px-1.5">
-                    {count}
-                  </Badge>
-                </div>
-              </TableCell>
-            </TableRow>
-          );
+        // Add data rows for this group (if not collapsed)
+        if (!header.collapsed) {
+          while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === header.key) {
+            rows.push(renderDataRow(data[dataIndex]));
+            dataIndex++;
+          }
+        } else {
+          // Skip to next group
+          while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === header.key) {
+            dataIndex++;
+          }
         }
-
-        if (collapsedGroups.has(lastGroupKey ?? "")) return;
       }
-
-      const isSelected = selectedIds.has(item.id);
-
-      rows.push(
-        <TableRow
-          key={item.id}
-          className={`group transition-colors ${isSelected ? "bg-primary/5" : ""}`}
-          data-state={isSelected ? "selected" : undefined}
-        >
-          {/* Checkbox */}
-          <TableCell className="w-10 pr-0" onClick={(e) => e.stopPropagation()}>
-            <Checkbox
-              checked={isSelected}
-              onCheckedChange={() => handleToggleRow(item.id)}
-              aria-label={`Select ${item.request_number}`}
-            />
-          </TableCell>
-
-          {/* Request Number — clickable link to detail */}
-          <TableCell
-            className="font-bold text-primary cursor-pointer w-[90px] whitespace-nowrap"
-            onClick={() => handleNavigateToDetail(item.id)}
+    } else if (groupBy && groups?.length) {
+      // Fallback: Use groups array when groupHeaders is empty but groups exist
+      let dataIndex = 0;
+      for (const group of groups) {
+        rows.push(
+          <TableRow
+            key={`group-${group.key}`}
+            className="bg-muted/30 hover:bg-muted/50 cursor-pointer select-none"
+            onClick={() => toggleGroup(group.key)}
           >
-            {item.request_number}
-          </TableCell>
+            <TableCell colSpan={COLS} className="py-2 font-medium text-sm">
+              <div className="flex items-center gap-2">
+                {collapsedGroups.has(group.key) ? (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+                <span>{getGroupDisplayLabel(group.key, groupBy)}</span>
+                <Badge variant="secondary" className="text-xs py-0 px-1.5">
+                  {group.count}
+                </Badge>
+              </div>
+            </TableCell>
+          </TableRow>
+        );
 
-          {/* Type */}
-          <TableCell className="w-[110px]" onClick={() => handleNavigateToDetail(item.id)}>
-            <Badge variant="outline" className="text-xs font-normal truncate max-w-[100px]">
-              {item.request_type?.name ?? "—"}
-            </Badge>
-          </TableCell>
-
-          {/* State — inline editor */}
-          <TableCell className="w-[150px]" onClick={(e) => e.stopPropagation()}>
-            {controlParams ? (
-              <InlineStateEditor
-                request={item}
-                availableStates={controlParams.request_states}
-              />
-            ) : (
-              <Badge variant="outline">{item.request_state?.name ?? "—"}</Badge>
-            )}
-          </TableCell>
-
-          {/* Priority */}
-          <TableCell className="w-[90px]" onClick={() => handleNavigateToDetail(item.id)}>
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getPriorityClass(item.priority?.level ?? 1)}`}
-            >
-              {item.priority?.name ?? "—"}
-            </span>
-          </TableCell>
-
-          {/* Category */}
-          <TableCell
-            className="w-[120px] text-sm text-muted-foreground"
-            onClick={() => handleNavigateToDetail(item.id)}
-          >
-            <span className="block truncate max-w-[110px]">{item.functional_category?.name ?? "—"}</span>
-          </TableCell>
-
-          {/* Title — wraps to 2 lines so the full track is readable at a glance */}
-          <TableCell
-            className="cursor-pointer min-w-[180px]"
-            onClick={() => handleNavigateToDetail(item.id)}
-          >
-            <span className="block text-sm font-medium line-clamp-2 break-words leading-snug" title={item.title}>
-              {item.title}
-            </span>
-          </TableCell>
-
-          {/* Assignee — inline editor */}
-          <TableCell className="w-[120px]" onClick={(e) => e.stopPropagation()}>
-            <InlineAssigneeEditor request={item} />
-          </TableCell>
-
-          {/* Date */}
-          <TableCell
-            className="w-[90px] text-sm text-muted-foreground whitespace-nowrap"
-            onClick={() => handleNavigateToDetail(item.id)}
-          >
-            {item.request_date
-              ? new Date(item.request_date).toLocaleDateString()
-              : "—"}
-          </TableCell>
-        </TableRow>
-      );
-    });
+        // Add data rows for this group
+        if (!collapsedGroups.has(group.key)) {
+          while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === group.key) {
+            rows.push(renderDataRow(data[dataIndex]));
+            dataIndex++;
+          }
+        } else {
+          while (dataIndex < data.length && getGroupKeyForItem(data[dataIndex], groupBy) === group.key) {
+            dataIndex++;
+          }
+        }
+      }
+    } else {
+      // No grouping - just render data rows
+      for (const item of data) {
+        rows.push(renderDataRow(item));
+      }
+    }
 
     return rows;
+  };
+
+  // Separate row renderer for cleaner code
+  const renderDataRow = (item: DevelopmentRequest): React.ReactNode => {
+    const isSelected = selectedIds.has(item.id);
+
+    return (
+      <TableRow
+        key={item.id}
+        className={`group transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+        data-state={isSelected ? "selected" : undefined}
+      >
+        {/* Checkbox */}
+        <TableCell className="w-10 pr-0" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => handleToggleRow(item.id)}
+            aria-label={`Select ${item.request_number}`}
+          />
+        </TableCell>
+
+        {/* Request Number — clickable link to detail */}
+        <TableCell
+          className="font-bold text-primary cursor-pointer w-[90px] whitespace-nowrap"
+          onClick={() => handleNavigateToDetail(item.id)}
+        >
+          {item.request_number}
+        </TableCell>
+
+        {/* Type */}
+        <TableCell className="w-[110px]" onClick={() => handleNavigateToDetail(item.id)}>
+          <Badge variant="outline" className="text-xs font-normal truncate max-w-[100px]">
+            {item.request_type?.name ?? "—"}
+          </Badge>
+        </TableCell>
+
+        {/* State — inline editor */}
+        <TableCell className="w-[150px]" onClick={(e) => e.stopPropagation()}>
+          {controlParams ? (
+            <InlineStateEditor
+              request={item}
+              availableStates={controlParams.request_states}
+            />
+          ) : (
+            <Badge variant="outline">{item.request_state?.name ?? "—"}</Badge>
+          )}
+        </TableCell>
+
+        {/* Priority */}
+        <TableCell className="w-[90px]" onClick={() => handleNavigateToDetail(item.id)}>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getPriorityClass(item.priority?.level ?? 1)}`}
+          >
+            {item.priority?.name ?? "—"}
+          </span>
+        </TableCell>
+
+        {/* Category */}
+        <TableCell
+          className="w-[120px] text-sm text-muted-foreground"
+          onClick={() => handleNavigateToDetail(item.id)}
+        >
+          <span className="block truncate max-w-[110px]">{item.functional_category?.name ?? "—"}</span>
+        </TableCell>
+
+        {/* Title — wraps to 2 lines so the full track is readable at a glance */}
+        <TableCell
+          className="cursor-pointer min-w-[180px]"
+          onClick={() => handleNavigateToDetail(item.id)}
+        >
+          <span className="block text-sm font-medium line-clamp-2 break-words leading-snug" title={item.title}>
+            {item.title}
+          </span>
+        </TableCell>
+
+        {/* Assignee — inline editor */}
+        <TableCell className="w-[120px]" onClick={(e) => e.stopPropagation()}>
+          <InlineAssigneeEditor request={item} />
+        </TableCell>
+
+        {/* Date */}
+        <TableCell
+          className="w-[90px] text-sm text-muted-foreground whitespace-nowrap"
+          onClick={() => handleNavigateToDetail(item.id)}
+        >
+          {item.request_date
+            ? new Date(item.request_date).toLocaleDateString()
+            : "—"}
+        </TableCell>
+      </TableRow>
+    );
   };
 
   // ---------------------------------------------------------------------------
