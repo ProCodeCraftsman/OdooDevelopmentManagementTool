@@ -3,9 +3,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Search, X, Plus, Archive } from "lucide-react";
-import type { FilterToken, QueryState } from "@/api/development-requests";
+import type { FilterToken, QueryState, GroupByOption } from "@/api/development-requests";
 import type { ControlParameters } from "@/api/development-requests";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ---------------------------------------------------------------------------
 // Field definitions for the "+ Add Filter" popover
@@ -30,13 +37,15 @@ interface Props {
   controlParams: ControlParameters | undefined;
   assignableUsers: { id: number; username: string }[];
   onChange: (qs: QueryState) => void;
+  groupBy?: GroupByOption | null;
+  onGroupByChange?: (value: GroupByOption | null) => void;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function QueryBar({ queryState, controlParams, assignableUsers, onChange }: Props) {
+export function QueryBar({ queryState, controlParams, assignableUsers, onChange, groupBy, onGroupByChange }: Props) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [addFilterOpen, setAddFilterOpen] = useState(false);
   const [activeAddField, setActiveAddField] = useState<FilterField | null>(null);
@@ -98,7 +107,7 @@ export function QueryBar({ queryState, controlParams, assignableUsers, onChange 
   return (
     <div className="space-y-2">
       {/* Row 1: Search + Add Filter + Group By + Archived + Clear All */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 flex-1">
         {/* Unified search */}
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -186,24 +195,47 @@ export function QueryBar({ queryState, controlParams, assignableUsers, onChange 
           </PopoverContent>
         </Popover>
 
-        {/* Show Archived toggle */}
-        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-          <Switch
-            checked={queryState.show_archived}
-            onCheckedChange={(v) => update({ show_archived: v })}
-          />
-          <Archive className="h-3.5 w-3.5 text-muted-foreground" />
-          Archived
-        </label>
+        {/* Group By + Archived */}
+        <div className="flex items-center gap-2">
+          {onGroupByChange && groupBy !== undefined && (
+            <>
+              <span className="text-sm text-muted-foreground">Group by:</span>
+              <Select
+                value={groupBy ?? "none"}
+                onValueChange={(value) => onGroupByChange(value === "none" ? null : (value as GroupByOption))}
+              >
+                <SelectTrigger className="w-[130px] h-8">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="state_category">State Category</SelectItem>
+                  <SelectItem value="assigned_developer">Assignee</SelectItem>
+                  <SelectItem value="priority">Priority</SelectItem>
+                  <SelectItem value="functional_category">Category</SelectItem>
+                </SelectContent>
+              </Select>
+            </>
+          )}
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <Switch
+              checked={queryState.show_archived}
+              onCheckedChange={(v) => update({ show_archived: v })}
+            />
+            <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+            Archived
+          </label>
+        </div>
 
-        {hasActiveFilters && (
+        {(hasActiveFilters || groupBy) && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 text-muted-foreground"
-            onClick={() =>
-              onChange({ filters: [], search: "", group_by: null, show_archived: false })
-            }
+            onClick={() => {
+              onChange({ filters: [], search: "", group_by: null, show_archived: false });
+              onGroupByChange?.(null);
+            }}
           >
             Clear All
           </Button>

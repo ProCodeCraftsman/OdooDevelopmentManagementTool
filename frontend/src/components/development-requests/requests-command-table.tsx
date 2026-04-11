@@ -189,10 +189,10 @@ export function RequestsCommandTable({
           <span className="block truncate max-w-[110px]">{item.functional_category?.name ?? "—"}</span>
         </TableCell>
         <TableCell
-          className="cursor-pointer min-w-[180px]"
+          className="cursor-pointer min-w-[180px] max-w-[300px]"
           onClick={() => handleNavigateToDetail(item.id)}
         >
-          <span className="block text-sm font-medium line-clamp-2 break-words leading-snug" title={item.title}>
+          <span className="block text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis" title={item.title}>
             {item.title}
           </span>
         </TableCell>
@@ -345,7 +345,7 @@ export function RequestsCommandTable({
       )}
 
       {/* Table */}
-      <div className="rounded-md border overflow-auto max-h-[calc(100vh-220px)]">
+      <div className="rounded-md border overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
             <TableRow>

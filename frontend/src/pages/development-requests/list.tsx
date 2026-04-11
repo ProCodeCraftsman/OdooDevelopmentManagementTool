@@ -3,13 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Archive, SearchX, RefreshCw, ServerOff, ChevronsDown, ChevronsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   useDevelopmentRequests,
   useControlParameters,
 } from "@/hooks/useDevelopmentRequests";
@@ -34,14 +27,6 @@ const DEFAULT_QUERY_STATE: QueryState = {
   group_by: null,
   show_archived: false,
 };
-
-const GROUP_BY_OPTIONS: { value: GroupByOption | "none"; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "state_category", label: "State Category" },
-  { value: "assigned_developer", label: "Assignee" },
-  { value: "priority", label: "Priority" },
-  { value: "functional_category", label: "Category" },
-];
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -125,8 +110,8 @@ export function DevelopmentRequestsListPage() {
   }, [handleQueryChange]);
 
   // ── Group by handlers ─────────────────────────────────────────────────────
-  const handleGroupByChange = useCallback((value: string) => {
-    const newGroupBy = value === "none" ? null : value as GroupByOption;
+  const handleGroupByChange = useCallback((value: GroupByOption | null | string) => {
+    const newGroupBy = value === "none" || !value ? null : value as GroupByOption;
     setGroupBy(newGroupBy);
     setPage(1);
     setSelectedIds(new Set());
@@ -254,49 +239,31 @@ export function DevelopmentRequestsListPage() {
         controlParams={controlParams}
         assignableUsers={assignableUsers}
         onChange={handleQueryChange}
+        groupBy={groupBy}
+        onGroupByChange={handleGroupByChange}
       />
-
-      {/* ── Group By Controls ── */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Group by:</span>
-          <Select value={groupBy || "none"} onValueChange={handleGroupByChange}>
-            <SelectTrigger className="w-[150px] h-8">
-              <SelectValue placeholder="None" />
-            </SelectTrigger>
-            <SelectContent>
-              {GROUP_BY_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {groupBy && data?.groups && data.groups.length > 0 && (
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1"
+            onClick={handleExpandAll}
+          >
+            <ChevronsDown className="h-3.5 w-3.5" />
+            Expand All
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1"
+            onClick={handleCollapseAll}
+          >
+            <ChevronsUp className="h-3.5 w-3.5" />
+            Collapse All
+          </Button>
         </div>
-
-        {groupBy && data?.groups && data.groups.length > 0 && (
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1"
-              onClick={handleExpandAll}
-            >
-              <ChevronsDown className="h-3.5 w-3.5" />
-              Expand All
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1"
-              onClick={handleCollapseAll}
-            >
-              <ChevronsUp className="h-3.5 w-3.5" />
-              Collapse All
-            </Button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ── Bulk Actions Toolbar (visible when rows are selected) ── */}
       {selectedIds.size > 0 && (
