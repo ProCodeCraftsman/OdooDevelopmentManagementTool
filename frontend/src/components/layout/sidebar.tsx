@@ -248,13 +248,13 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
         </Tooltip>
 
         <div className={cn("overflow-hidden transition-all", drExpanded ? "max-h-96" : "max-h-0")}>
-          <div className="mt-1 space-y-0.5">
+          <div className={cn("mt-1 space-y-0.5", collapsed && "flex flex-col items-center")}>
             {drNavItems.map((item) => (
               <Tooltip delayDuration={0} key={item.href}>
                 <TooltipTrigger asChild>
                   <DrNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
                 </TooltipTrigger>
-                {collapsed && !isMobile && <TooltipContent side="right">{item.title}</TooltipContent>}
+                {collapsed && !isMobile && <TooltipContent side="left">{item.title}</TooltipContent>}
               </Tooltip>
             ))}
           </div>
@@ -294,13 +294,13 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
         </Tooltip>
 
         <div className={cn("overflow-hidden transition-all", serverEnvExpanded ? "max-h-96" : "max-h-0")}>
-          <div className="mt-1 space-y-0.5">
+          <div className={cn("mt-1 space-y-0.5", collapsed && "flex flex-col items-center")}>
             {serverEnvNavItems.map((item) => (
               <Tooltip delayDuration={0} key={item.href}>
                 <TooltipTrigger asChild>
                   <ServerEnvNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
                 </TooltipTrigger>
-                {collapsed && !isMobile && <TooltipContent side="right">{item.title}</TooltipContent>}
+                {collapsed && !isMobile && <TooltipContent side="left">{item.title}</TooltipContent>}
               </Tooltip>
             ))}
           </div>
@@ -340,13 +340,13 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
             </Tooltip>
 
             <div className={cn("overflow-hidden transition-all", settingsExpanded ? "max-h-96" : "max-h-0")}>
-              <div className="mt-1 space-y-0.5">
+              <div className={cn("mt-1 space-y-0.5", collapsed && "flex flex-col items-center")}>
                 {settingsNavItems.map((item) => (
                   <Tooltip delayDuration={0} key={item.href}>
                     <TooltipTrigger asChild>
                       <SettingsNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
                     </TooltipTrigger>
-                    {collapsed && !isMobile && <TooltipContent side="right">{item.title}</TooltipContent>}
+                    {collapsed && !isMobile && <TooltipContent side="left">{item.title}</TooltipContent>}
                   </Tooltip>
                 ))}
               </div>
