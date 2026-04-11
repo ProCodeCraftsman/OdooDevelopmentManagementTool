@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { type ColumnDef, type PaginationState, type SortingState } from "@tanstack/react-table";
 import {
   AlertCircle,
@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { reportsApi } from "@/api/reports";
+import { syncApi } from "@/api/sync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +31,7 @@ import {
   useReportMetadata,
 } from "@/hooks/useReports";
 import { useTriggerSyncAll } from "@/hooks/useSync";
+import { useEnvironments } from "@/hooks/useEnvironments";
 import { cn } from "@/lib/utils";
 import type {
   ActionCountsMap,
@@ -636,10 +638,26 @@ function ComparisonSummaryTab({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+const SYNC_JOB_TIMEOUT_MS = 60_000;
+
 export function ComparisonPage() {
   const { data: metadata, isLoading: metaLoading } = useReportMetadata();
+  const { data: environments } = useEnvironments();
   const generateReport = useGenerateReport();
   const syncAll = useTriggerSyncAll();
+
+  const [syncing, setSyncing] = useState(false);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const jobStartTimesRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const isGenerating = metadata?.is_generating || generateReport.isPending;
   const neverGenerated = !metaLoading && !metadata?.last_generated_at && !metadata?.is_generating;
@@ -659,14 +677,137 @@ export function ComparisonPage() {
   };
 
   const handleSyncAll = async () => {
+    if (syncing) return;
+    if (!environments || environments.length === 0) return;
+
+    const activeEnvs = environments.filter((e) => e.is_active);
+    if (activeEnvs.length === 0) {
+      toast.info("No active environments to sync");
+      return;
+    }
+
+    setSyncing(true);
+    const toastId = "sync-all";
+    toast.loading(`Initiating sync for ${activeEnvs.length} environment(s)...`, {
+      id: toastId,
+      duration: Infinity,
+    });
+
     try {
-      await syncAll.mutateAsync();
-      toast.warning(
-        "Environments synced. Please regenerate the comparison report to see latest data.",
-        { duration: 6000 }
-      );
-    } catch {
-      toast.error("Sync All failed");
+      const jobs = await syncAll.mutateAsync();
+
+      if (jobs.length === 0) {
+        toast.dismiss(toastId);
+        toast.info("No sync jobs were created");
+        setSyncing(false);
+        return;
+      }
+
+      const jobEnvMap: Record<string, string> = {};
+      const now = Date.now();
+      jobs.forEach((job, idx) => {
+        jobEnvMap[job.job_id] = activeEnvs[idx]?.name ?? `Environment ${idx + 1}`;
+        jobStartTimesRef.current[job.job_id] = now;
+      });
+
+      const completedJobs = new Set<string>();
+      const failedJobs = new Set<string>();
+      const timedOutJobs = new Set<string>();
+
+      toast.loading(`Syncing ${jobs.length} environment(s) — 0 / ${jobs.length} done`, {
+        id: toastId,
+        duration: Infinity,
+      });
+
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+      let consecutiveErrors = 0;
+      const MAX_CONSECUTIVE_ERRORS = 3;
+
+      pollIntervalRef.current = setInterval(async () => {
+        const pending = jobs.filter(
+          (j) =>
+            !completedJobs.has(j.job_id) &&
+            !failedJobs.has(j.job_id) &&
+            !timedOutJobs.has(j.job_id)
+        );
+
+        const pollNow = Date.now();
+        pending.forEach((j) => {
+          const elapsed = pollNow - (jobStartTimesRef.current[j.job_id] ?? pollNow);
+          if (elapsed > SYNC_JOB_TIMEOUT_MS) {
+            timedOutJobs.add(j.job_id);
+            toast.error(`${jobEnvMap[j.job_id]} sync timed out`, {
+              description: "No response after 60 s",
+            });
+          }
+        });
+
+        const stillPending = pending.filter((j) => !timedOutJobs.has(j.job_id));
+
+        if (stillPending.length > 0) {
+          try {
+            const statuses = await Promise.all(stillPending.map((j) => syncApi.getStatus(j.job_id)));
+            consecutiveErrors = 0;
+
+            statuses.forEach((s) => {
+              if (s.status === "completed" && !completedJobs.has(s.job_id)) {
+                completedJobs.add(s.job_id);
+                toast.success(`${jobEnvMap[s.job_id]} synced`);
+              } else if (s.status === "failed" && !failedJobs.has(s.job_id)) {
+                failedJobs.add(s.job_id);
+                toast.error(`${jobEnvMap[s.job_id]} sync failed`, {
+                  description: s.error_message ?? "Unknown error",
+                });
+              }
+            });
+          } catch {
+            consecutiveErrors += 1;
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+              clearInterval(pollIntervalRef.current!);
+              pollIntervalRef.current = null;
+              jobStartTimesRef.current = {};
+              toast.dismiss(toastId);
+              toast.error("Sync All aborted: backend unreachable", {
+                description: `${consecutiveErrors} consecutive polling failures`,
+              });
+              setSyncing(false);
+              return;
+            }
+          }
+        }
+
+        const done = completedJobs.size + failedJobs.size + timedOutJobs.size;
+        toast.loading(`Syncing ${jobs.length} environment(s) — ${done} / ${jobs.length} done`, {
+          id: toastId,
+          duration: Infinity,
+        });
+
+        if (done >= jobs.length) {
+          clearInterval(pollIntervalRef.current!);
+          pollIntervalRef.current = null;
+          jobStartTimesRef.current = {};
+          toast.dismiss(toastId);
+
+          if (failedJobs.size === 0 && timedOutJobs.size === 0) {
+            toast.success("All environments synced successfully");
+          } else {
+            const issues = failedJobs.size + timedOutJobs.size;
+            toast.warning("Sync all completed with issues", {
+              description: `${completedJobs.size} succeeded, ${failedJobs.size} failed, ${timedOutJobs.size} timed out`,
+            });
+            void issues;
+          }
+
+          setSyncing(false);
+        }
+      }, 3000);
+    } catch (error) {
+      toast.dismiss(toastId);
+      toast.error("Failed to start sync all", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+      setSyncing(false);
     }
   };
 
@@ -720,9 +861,9 @@ export function ComparisonPage() {
             variant="outline"
             size="sm"
             onClick={handleSyncAll}
-            disabled={syncAll.isPending}
+            disabled={syncing || !environments || environments.length === 0}
           >
-            {syncAll.isPending ? (
+            {syncing ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Syncing...
