@@ -111,7 +111,8 @@ function SettingsNavItem({ item, collapsed, isMobile, onClick }: SettingsNavItem
       to={item.href}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ml-4 mr-2",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        collapsed ? "justify-center px-0" : "ml-4 mr-2",
         isActive
           ? "bg-primary/10 text-primary font-medium"
           : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -140,7 +141,8 @@ function ServerEnvNavItem({ item, collapsed, isMobile, onClick }: ServerEnvNavIt
       to={item.href}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ml-4 mr-2",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        collapsed ? "justify-center px-0" : "ml-4 mr-2",
         isActive
           ? "bg-primary/10 text-primary font-medium"
           : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -162,7 +164,8 @@ function DrNavItem({ item, collapsed, isMobile, onClick }: ServerEnvNavItemProps
       to={item.href}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ml-4 mr-2",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        collapsed ? "justify-center px-0" : "ml-4 mr-2",
         isActive
           ? "bg-primary/10 text-primary font-medium"
           : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -247,7 +250,12 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
         <div className={cn("overflow-hidden transition-all", drExpanded ? "max-h-96" : "max-h-0")}>
           <div className="mt-1 space-y-0.5">
             {drNavItems.map((item) => (
-              <DrNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+              <Tooltip delayDuration={0} key={item.href}>
+                <TooltipTrigger asChild>
+                  <DrNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+                </TooltipTrigger>
+                {collapsed && !isMobile && <TooltipContent side="right">{item.title}</TooltipContent>}
+              </Tooltip>
             ))}
           </div>
         </div>
@@ -288,7 +296,12 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
         <div className={cn("overflow-hidden transition-all", serverEnvExpanded ? "max-h-96" : "max-h-0")}>
           <div className="mt-1 space-y-0.5">
             {serverEnvNavItems.map((item) => (
-              <ServerEnvNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+              <Tooltip delayDuration={0} key={item.href}>
+                <TooltipTrigger asChild>
+                  <ServerEnvNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+                </TooltipTrigger>
+                {collapsed && !isMobile && <TooltipContent side="right">{item.title}</TooltipContent>}
+              </Tooltip>
             ))}
           </div>
         </div>
@@ -329,7 +342,12 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
             <div className={cn("overflow-hidden transition-all", settingsExpanded ? "max-h-96" : "max-h-0")}>
               <div className="mt-1 space-y-0.5">
                 {settingsNavItems.map((item) => (
-                  <SettingsNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+                  <Tooltip delayDuration={0} key={item.href}>
+                    <TooltipTrigger asChild>
+                      <SettingsNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+                    </TooltipTrigger>
+                    {collapsed && !isMobile && <TooltipContent side="right">{item.title}</TooltipContent>}
+                  </Tooltip>
                 ))}
               </div>
             </div>
