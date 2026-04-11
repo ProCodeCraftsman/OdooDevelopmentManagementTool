@@ -228,13 +228,17 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
               )}
             >
               <ClipboardList className="h-5 w-5" />
-              <span className="flex-1 text-left">Requests</span>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  drExpanded && "rotate-180"
-                )}
-              />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 text-left">Requests</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      drExpanded && "rotate-180"
+                    )}
+                  />
+                </>
+              )}
             </Link>
           </TooltipTrigger>
           {collapsed && <TooltipContent side="right">Requests</TooltipContent>}
@@ -265,13 +269,17 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
               )}
             >
               <Server className="h-5 w-5" />
-              <span className="flex-1 text-left">Server Environments</span>
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  serverEnvExpanded && "rotate-180"
-                )}
-              />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 text-left">Server Environments</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      serverEnvExpanded && "rotate-180"
+                    )}
+                  />
+                </>
+              )}
             </Link>
           </TooltipTrigger>
           {collapsed && <TooltipContent side="right">Server Environments</TooltipContent>}
@@ -302,13 +310,17 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
                   )}
                 >
                   <Settings className="h-5 w-5" />
-                  <span className="flex-1 text-left">Settings</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      settingsExpanded && "rotate-180"
-                    )}
-                  />
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1 text-left">Settings</span>
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 transition-transform",
+                          settingsExpanded && "rotate-180"
+                        )}
+                      />
+                    </>
+                  )}
                 </Link>
               </TooltipTrigger>
               {collapsed && <TooltipContent side="right">Settings</TooltipContent>}
