@@ -344,49 +344,93 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
       </nav>
 
       <div className="border-t p-2 space-y-1 sticky bottom-0 bg-background">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-            {user?.username?.charAt(0).toUpperCase() || "U"}
+        {!collapsed ? (
+          <>
+            <div className="flex items-center gap-3 px-3 py-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+                {user?.username?.charAt(0).toUpperCase() || "U"}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <p className="text-sm font-medium truncate">{user?.username}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {isAdmin ? "Admin" : "User"}
+                </p>
+              </div>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={toggleTheme}
+                  >
+                    {theme === "dark" ? (
+                      <Moon className="h-4 w-4" />
+                    ) : theme === "light" ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  Theme: {theme === "system" ? "System" : theme.charAt(0).toUpperCase() + theme.slice(1)}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => {
+                logout();
+                onItemClick?.();
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2 py-2">
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={toggleTheme}
+                >
+                  {theme === "dark" ? (
+                    <Moon className="h-4 w-4" />
+                  ) : theme === "light" ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Moon className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                Theme: {theme === "system" ? "System" : theme.charAt(0).toUpperCase() + theme.slice(1)}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    logout();
+                    onItemClick?.();
+                  }}
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Logout</TooltipContent>
+            </Tooltip>
           </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-medium truncate">{user?.username}</p>
-            <p className="text-xs text-muted-foreground truncate">
-              {isAdmin ? "Admin" : "User"}
-            </p>
-          </div>
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={toggleTheme}
-              >
-                {theme === "dark" ? (
-                  <Moon className="h-4 w-4" />
-                ) : theme === "light" ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Moon className="h-4 w-4 text-muted-foreground" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              Theme: {theme === "system" ? "System" : theme.charAt(0).toUpperCase() + theme.slice(1)}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <Button
-          variant="ghost"
-          className="w-full justify-start"
-          onClick={() => {
-            logout();
-            onItemClick?.();
-          }}
-        >
-          <LogOut className="mr-2 h-4 w-4" />
-          Logout
-        </Button>
+        )}
       </div>
     </>
   );
@@ -475,6 +519,7 @@ export function Sidebar() {
               onToggleServerEnv={handleToggleServerEnv}
               onToggleDr={handleToggleDr}
               onItemClick={handleMobileNavClick}
+
             />
           </SheetContent>
         </Sheet>
