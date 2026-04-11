@@ -1,9 +1,16 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useDevelopmentRequestLines } from "@/hooks/useDevelopmentRequests";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -13,10 +20,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { RequestModuleLineWithRequest, DevelopmentRequestLineFilters } from "@/api/development-requests";
-import { Download, SearchX, Archive, X } from "lucide-react";
+import { Download, SearchX, Archive, X, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp } from "lucide-react";
 import { toast } from "sonner";
 import { developmentRequestsApi } from "@/api/development-requests";
 import { DrLinesQueryBar } from "@/components/development-requests/dr-lines-query-bar";
+import { DrGroupHeader } from "@/components/development-requests/dr-group-header";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -37,6 +45,18 @@ const UAT_STATUS_COLORS: Record<string, string> = {
 
 const COLS = 8;
 
+// Group by options
+const GROUP_BY_OPTIONS: { value: DevelopmentRequestLineFilters["group_by"]; label: string }[] = [
+  { value: undefined, label: "None" },
+  { value: "request_type", label: "Type" },
+  { value: "request_state", label: "State" },
+  { value: "functional_category", label: "Category" },
+  { value: "priority", label: "Priority" },
+  { value: "assigned_developer", label: "Assignee" },
+  { value: "module", label: "Module" },
+  { value: "uat_status", label: "UAT Status" },
+];
+
 // ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
@@ -45,6 +65,10 @@ export function DevelopmentRequestLinesPage() {
   const [filters, setFilters] = useState<DevelopmentRequestLineFilters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
+
+  // Group by state
+  const [groupBy, setGroupBy] = useState<DevelopmentRequestLineFilters["group_by"]>(undefined);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -57,7 +81,8 @@ export function DevelopmentRequestLinesPage() {
     module_names: filters.module_names,
     uat_statuses: filters.uat_statuses,
     search: filters.search || undefined,
-  }), [filters]);
+    group_by: groupBy || undefined,
+  }), [filters, groupBy]);
 
   const { data, isLoading } = useDevelopmentRequestLines(apiFilters, page, pageSize);
 
@@ -142,6 +167,47 @@ export function DevelopmentRequestLinesPage() {
   }, [selectedIds, apiFilters]);
 
   // ---------------------------------------------------------------------------
+  // Grouping handlers
+  // ---------------------------------------------------------------------------
+
+  // Initialize expanded groups when data.groups changes
+  useEffect(() => {
+    if (data?.groups && data.groups.length > 0) {
+      const newExpanded = new Set<string>();
+      data.groups.forEach((g) => newExpanded.add(g.key));
+      setExpandedGroups(newExpanded);
+    }
+  }, [data?.groups]);
+
+  const handleGroupByChange = useCallback((value: string) => {
+    const newGroupBy = value === "none" ? undefined : value as DevelopmentRequestLineFilters["group_by"];
+    setGroupBy(newGroupBy);
+    setPage(1);
+  }, []);
+
+  const handleToggleGroup = useCallback((key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    if (data?.groups) {
+      setExpandedGroups(new Set(data.groups.map((g) => g.key)));
+    }
+  }, [data?.groups]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedGroups(new Set());
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Pagination
   // ---------------------------------------------------------------------------
 
@@ -203,9 +269,78 @@ export function DevelopmentRequestLinesPage() {
     );
   }, [selectedIds, handleToggleRow]);
 
+  // Extract group key from an item based on current group_by
+  const getItemGroupKey = useCallback((item: RequestModuleLineWithRequest): string => {
+    if (!groupBy) return "__ungrouped";
+
+    switch (groupBy) {
+      case "module":
+        return item.module_technical_name;
+      case "uat_status":
+        return item.uat_status ?? "None";
+      case "request_type":
+        return item.request?.request_type?.name ?? "Unknown";
+      case "request_state":
+        return item.request?.request_state?.name ?? "Unknown";
+      case "functional_category":
+        return item.request?.functional_category?.name ?? "Unknown";
+      case "priority":
+        return item.request?.priority?.name ?? "Unknown";
+      case "assigned_developer":
+        return item.request?.assigned_developer?.username ?? "Unassigned";
+      default:
+        return "__ungrouped";
+    }
+  }, [groupBy]);
+
+  // Group items by their group key
+  const groupedItems = useMemo(() => {
+    if (!groupBy || !data?.groups) {
+      return null;
+    }
+
+    const groups: Map<string, RequestModuleLineWithRequest[]> = new Map();
+    items.forEach((item) => {
+      const key = getItemGroupKey(item);
+      const existing = groups.get(key) || [];
+      groups.set(key, [...existing, item]);
+    });
+    return groups;
+  }, [groupBy, items, data?.groups, getItemGroupKey]);
+
   const tableBodyRows = useMemo(() => {
-    return items.map((item) => renderLineRow(item));
-  }, [items, renderLineRow]);
+    if (!groupBy || !groupedItems || !data?.groups) {
+      // Flat rendering
+      return items.map((item) => renderLineRow(item));
+    }
+
+    // Grouped rendering
+    const rows: React.ReactNode[] = [];
+    data.groups.forEach((group) => {
+      const isExpanded = expandedGroups.has(group.key);
+      const groupItems = groupedItems.get(group.key) || [];
+
+      // Group header
+      rows.push(
+        <DrGroupHeader
+          key={`header-${group.key}`}
+          label={group.label}
+          count={group.count}
+          isExpanded={isExpanded}
+          onToggle={() => handleToggleGroup(group.key)}
+        />
+      );
+
+      // Group rows (if expanded)
+      if (isExpanded) {
+        groupItems.forEach((item) => {
+          rows.push(renderLineRow(item));
+        });
+      }
+    });
+
+    return rows;
+  }, [items, groupBy, groupedItems, data?.groups, expandedGroups, renderLineRow, handleToggleGroup]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -231,6 +366,48 @@ export function DevelopmentRequestLinesPage() {
 
       {/* ── Query Bar ── */}
       <DrLinesQueryBar filters={filters} onChange={handleFilterChange} />
+
+      {/* ── Group By Controls ── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Group by:</span>
+          <Select value={groupBy || "none"} onValueChange={handleGroupByChange}>
+            <SelectTrigger className="w-[150px] h-8">
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              {GROUP_BY_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value || "none"} value={opt.value || "none"}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {groupBy && data?.groups && data.groups.length > 0 && (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={handleExpandAll}
+            >
+              <ChevronsDown className="h-3.5 w-3.5" />
+              Expand All
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={handleCollapseAll}
+            >
+              <ChevronsUp className="h-3.5 w-3.5" />
+              Collapse All
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* ── Bulk Actions Toolbar ── */}
       {selectedIds.size > 0 && (
