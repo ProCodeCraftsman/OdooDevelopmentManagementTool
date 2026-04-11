@@ -228,31 +228,25 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
               )}
             >
               <ClipboardList className="h-5 w-5" />
-              {!collapsed && (
-                <>
-                  <span className="flex-1 text-left">Requests</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      drExpanded && "rotate-180"
-                    )}
-                  />
-                </>
-              )}
+              <span className="flex-1 text-left">Requests</span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  drExpanded && "rotate-180"
+                )}
+              />
             </Link>
           </TooltipTrigger>
           {collapsed && <TooltipContent side="right">Requests</TooltipContent>}
         </Tooltip>
 
-        {!collapsed && (
-          <div className={cn("overflow-hidden transition-all", drExpanded ? "max-h-96" : "max-h-0")}>
-            <div className="mt-1 space-y-0.5">
-              {drNavItems.map((item) => (
-                <DrNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
-              ))}
-            </div>
+        <div className={cn("overflow-hidden transition-all", drExpanded ? "max-h-96" : "max-h-0")}>
+          <div className="mt-1 space-y-0.5">
+            {drNavItems.map((item) => (
+              <DrNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+            ))}
           </div>
-        )}
+        </div>
 
         <NavItem key={mainNavItems[2].href} item={mainNavItems[2]} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
 
@@ -271,31 +265,25 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
               )}
             >
               <Server className="h-5 w-5" />
-              {!collapsed && (
-                <>
-                  <span className="flex-1 text-left">Server Environments</span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      serverEnvExpanded && "rotate-180"
-                    )}
-                  />
-                </>
-              )}
+              <span className="flex-1 text-left">Server Environments</span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  serverEnvExpanded && "rotate-180"
+                )}
+              />
             </Link>
           </TooltipTrigger>
           {collapsed && <TooltipContent side="right">Server Environments</TooltipContent>}
         </Tooltip>
 
-        {!collapsed && (
-          <div className={cn("overflow-hidden transition-all", serverEnvExpanded ? "max-h-96" : "max-h-0")}>
-            <div className="mt-1 space-y-0.5">
-              {serverEnvNavItems.map((item) => (
-                <ServerEnvNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
-              ))}
-            </div>
+        <div className={cn("overflow-hidden transition-all", serverEnvExpanded ? "max-h-96" : "max-h-0")}>
+          <div className="mt-1 space-y-0.5">
+            {serverEnvNavItems.map((item) => (
+              <ServerEnvNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+            ))}
           </div>
-        )}
+        </div>
 
         {isAdmin && (
           <>
@@ -314,31 +302,25 @@ function NavContent({ collapsed, isMobile, isAdmin, settingsExpanded, serverEnvE
                   )}
                 >
                   <Settings className="h-5 w-5" />
-                  {!collapsed && (
-                    <>
-                      <span className="flex-1 text-left">Settings</span>
-                      <ChevronDown
-                        className={cn(
-                          "h-4 w-4 transition-transform",
-                          settingsExpanded && "rotate-180"
-                        )}
-                      />
-                    </>
-                  )}
+                  <span className="flex-1 text-left">Settings</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      settingsExpanded && "rotate-180"
+                    )}
+                  />
                 </Link>
               </TooltipTrigger>
               {collapsed && <TooltipContent side="right">Settings</TooltipContent>}
             </Tooltip>
 
-            {!collapsed && (
-              <div className={cn("overflow-hidden transition-all", settingsExpanded ? "max-h-96" : "max-h-0")}>
-                <div className="mt-1 space-y-0.5">
-                  {settingsNavItems.map((item) => (
-                    <SettingsNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
-                  ))}
-                </div>
+            <div className={cn("overflow-hidden transition-all", settingsExpanded ? "max-h-96" : "max-h-0")}>
+              <div className="mt-1 space-y-0.5">
+                {settingsNavItems.map((item) => (
+                  <SettingsNavItem key={item.href} item={item} collapsed={collapsed} isMobile={isMobile} onClick={onItemClick} />
+                ))}
               </div>
-            )}
+            </div>
           </>
         )}
       </nav>
