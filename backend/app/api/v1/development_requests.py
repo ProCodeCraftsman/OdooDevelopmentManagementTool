@@ -424,7 +424,7 @@ def get_all_module_lines(
     module_names: Optional[str] = Query(None),
     uat_statuses: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     search: Optional[str] = Query(None),
     group_by: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -530,7 +530,7 @@ def list_requests(
     group_by: Optional[str] = Query(None, description="Group items by: state_category | assigned_developer | priority | functional_category"),
     state_category: Optional[str] = Query(None, description="Filter by state category: Draft | In Progress | Ready | Done | Cancelled"),
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

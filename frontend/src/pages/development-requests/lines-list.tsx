@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useDevelopmentRequestLines } from "@/hooks/useDevelopmentRequests";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { RequestModuleLineWithRequest, DevelopmentRequestLineFilters } from "@/api/development-requests";
-import { Download, SearchX, Archive, X, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp } from "lucide-react";
+import type { RequestTypeBrief, FunctionalCategoryBrief, PriorityBrief, UserBrief } from "@/api/development-requests";
+import { Download, SearchX, Archive, X, ChevronsDown, ChevronsUp } from "lucide-react";
+
+interface RequestWithDetails extends RequestModuleLineWithRequest {
+  request: RequestModuleLineWithRequest["request"] & {
+    request_type?: RequestTypeBrief;
+    functional_category?: FunctionalCategoryBrief;
+    priority?: PriorityBrief;
+    assigned_developer?: UserBrief;
+  };
+}
 import { toast } from "sonner";
 import { developmentRequestsApi } from "@/api/development-requests";
 import { DrLinesQueryBar } from "@/components/development-requests/dr-lines-query-bar";
@@ -170,19 +180,11 @@ export function DevelopmentRequestLinesPage() {
   // Grouping handlers
   // ---------------------------------------------------------------------------
 
-  // Initialize expanded groups when data.groups changes
-  useEffect(() => {
-    if (data?.groups && data.groups.length > 0) {
-      const newExpanded = new Set<string>();
-      data.groups.forEach((g) => newExpanded.add(g.key));
-      setExpandedGroups(newExpanded);
-    }
-  }, [data?.groups]);
-
   const handleGroupByChange = useCallback((value: string) => {
     const newGroupBy = value === "none" ? undefined : value as DevelopmentRequestLineFilters["group_by"];
     setGroupBy(newGroupBy);
     setPage(1);
+    setExpandedGroups(new Set());
   }, []);
 
   const handleToggleGroup = useCallback((key: string) => {
@@ -270,7 +272,7 @@ export function DevelopmentRequestLinesPage() {
   }, [selectedIds, handleToggleRow]);
 
   // Extract group key from an item based on current group_by
-  const getItemGroupKey = useCallback((item: RequestModuleLineWithRequest): string => {
+  const getItemGroupKey = useCallback((item: RequestWithDetails): string => {
     if (!groupBy) return "__ungrouped";
 
     switch (groupBy) {
@@ -299,11 +301,11 @@ export function DevelopmentRequestLinesPage() {
       return null;
     }
 
-    const groups: Map<string, RequestModuleLineWithRequest[]> = new Map();
+    const groups: Map<string, RequestWithDetails[]> = new Map();
     items.forEach((item) => {
-      const key = getItemGroupKey(item);
+      const key = getItemGroupKey(item as RequestWithDetails);
       const existing = groups.get(key) || [];
-      groups.set(key, [...existing, item]);
+      groups.set(key, [...existing, item as RequestWithDetails]);
     });
     return groups;
   }, [groupBy, items, data?.groups, getItemGroupKey]);

@@ -27,8 +27,9 @@ import {
 } from "@/components/ui/table";
 import { InlineStateEditor } from "@/components/development-requests/inline-state-editor";
 import { InlineAssigneeEditor } from "@/components/development-requests/inline-assignee-editor";
-import type { DevelopmentRequest } from "@/api/development-requests";
+import type { DevelopmentRequest, GroupInfo } from "@/api/development-requests";
 import type { ControlParameters } from "@/api/development-requests";
+import { DrGroupHeader } from "@/components/development-requests/dr-group-header";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -71,6 +72,12 @@ interface Props {
   // Data
   controlParams: ControlParameters | undefined;
   emptyState?: React.ReactNode;
+
+  // Grouping
+  groupBy?: string | null;
+  groups?: GroupInfo[];
+  expandedGroups?: Set<string>;
+  onToggleGroup?: (key: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +99,10 @@ export function RequestsCommandTable({
   onClearAllRecords,
   controlParams,
   emptyState,
+  groupBy,
+  groups,
+  expandedGroups,
+  onToggleGroup,
 }: Props) {
   const navigate = useNavigate();
 
@@ -198,9 +209,59 @@ export function RequestsCommandTable({
     );
   }, [selectedIds, handleNavigateToDetail, controlParams, handleToggleRow]);
 
+  // Get group key from a request based on current group_by
+  const getItemGroupKey = useCallback((item: DevelopmentRequest): string => {
+    if (!groupBy) return "__ungrouped";
+
+    switch (groupBy) {
+      case "state_category":
+        return item.request_state?.category ?? "Unknown";
+      case "assigned_developer":
+        return item.assigned_developer?.username ?? "Unassigned";
+      case "priority":
+        return item.priority?.name ?? "Unknown";
+      case "functional_category":
+        return item.functional_category?.name ?? "Unknown";
+      default:
+        return "__ungrouped";
+    }
+  }, [groupBy]);
+
   const tableBodyRows = useMemo(() => {
-    return data.map((item) => renderRequestRow(item));
-  }, [data, renderRequestRow]);
+    if (!groupBy || !groups || !data) {
+      // Flat rendering
+      return data.map((item) => renderRequestRow(item));
+    }
+
+    // Grouped rendering - filter items from main data for each group
+    const rows: React.ReactNode[] = [];
+    groups.forEach((group) => {
+      const isExpanded = expandedGroups?.has(group.key) ?? true;
+
+      // Filter items that belong to this group
+      const groupItems = data.filter((item) => getItemGroupKey(item) === group.key);
+
+      // Group header
+      rows.push(
+        <DrGroupHeader
+          key={`header-${group.key}`}
+          label={group.label}
+          count={group.count}
+          isExpanded={isExpanded}
+          onToggle={() => onToggleGroup?.(group.key)}
+        />
+      );
+
+      // Group rows (if expanded)
+      if (isExpanded) {
+        groupItems.forEach((item) => {
+          rows.push(renderRequestRow(item));
+        });
+      }
+    });
+
+    return rows;
+  }, [data, groupBy, groups, expandedGroups, getItemGroupKey, renderRequestRow, onToggleGroup]);
 
   // ---------------------------------------------------------------------------
   // Loading skeleton

@@ -357,6 +357,7 @@ export interface DevelopmentRequestFilters {
   is_archived?: boolean;
   search?: string;
   group_by?: GroupByOption;
+  state_category?: string;
 }
 
 export interface PaginatedResponse<T> {

@@ -1,13 +1,20 @@
 import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Archive, SearchX, RefreshCw, ServerOff } from "lucide-react";
+import { Plus, Archive, SearchX, RefreshCw, ServerOff, ChevronsDown, ChevronsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   useDevelopmentRequests,
   useControlParameters,
 } from "@/hooks/useDevelopmentRequests";
 import { developmentRequestsApi } from "@/api/development-requests";
-import type { DevelopmentRequestFilters, QueryState } from "@/api/development-requests";
+import type { DevelopmentRequestFilters, QueryState, GroupByOption } from "@/api/development-requests";
 import { useAssignableUsers } from "@/hooks/useUsers";
 import { useAuthStore } from "@/store/auth-store";
 import { QueryBar } from "@/components/development-requests/query-bar";
@@ -24,8 +31,17 @@ const PAGE_SIZE = 20;
 const DEFAULT_QUERY_STATE: QueryState = {
   filters: [],
   search: "",
+  group_by: null,
   show_archived: false,
 };
+
+const GROUP_BY_OPTIONS: { value: GroupByOption | "none"; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "state_category", label: "State Category" },
+  { value: "assigned_developer", label: "Assignee" },
+  { value: "priority", label: "Priority" },
+  { value: "functional_category", label: "Category" },
+];
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -50,6 +66,10 @@ export function DevelopmentRequestsListPage() {
   const [activeViewId, setActiveViewId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
 
+  // ── Group by state ─────────────────────────────────────────────────────────
+  const [groupBy, setGroupBy] = useState<GroupByOption | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
   // ── Selection state ───────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [allRecordsSelected, setAllRecordsSelected] = useState(false);
@@ -64,11 +84,14 @@ export function DevelopmentRequestsListPage() {
       ...filtersMap,
       search: queryState.search || undefined,
       is_archived: queryState.show_archived ? undefined : false,
+      group_by: groupBy || undefined,
     };
-  }, [queryState]);
+  }, [queryState, groupBy]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
-  const { data, isLoading, error, refetch } = useDevelopmentRequests(apiFilters, page, PAGE_SIZE);
+  // When grouping is active, fetch more items to populate all groups
+  const effectiveLimit = groupBy ? 200 : PAGE_SIZE;
+  const { data, isLoading, error, refetch } = useDevelopmentRequests(apiFilters, page, effectiveLimit);
   const { data: controlParams } = useControlParameters();
   const { data: assignableUsers = [] } = useAssignableUsers();
 
@@ -100,6 +123,39 @@ export function DevelopmentRequestsListPage() {
     setActiveViewId(viewId);
     handleQueryChange(qs);
   }, [handleQueryChange]);
+
+  // ── Group by handlers ─────────────────────────────────────────────────────
+  const handleGroupByChange = useCallback((value: string) => {
+    const newGroupBy = value === "none" ? null : value as GroupByOption;
+    setGroupBy(newGroupBy);
+    setPage(1);
+    setSelectedIds(new Set());
+    setAllRecordsSelected(false);
+    setExpandedGroups(new Set());
+  }, []);
+
+  // Group expand/collapse handlers - derive from current data
+  const handleToggleGroup = useCallback((key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    if (data?.groups) {
+      setExpandedGroups(new Set(data.groups.map((g) => g.key)));
+    }
+  }, [data?.groups]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedGroups(new Set());
+  }, []);
 
   // ── Empty states ──────────────────────────────────────────────────────────
   const isNetworkError = error && (error as Error).message === "Network Error";
@@ -160,7 +216,7 @@ export function DevelopmentRequestsListPage() {
         total_records: data.total,
         total_pages: data.pages,
         current_page: data.page,
-        limit: PAGE_SIZE,
+        limit: effectiveLimit,
       }
     : undefined;
 
@@ -200,6 +256,48 @@ export function DevelopmentRequestsListPage() {
         onChange={handleQueryChange}
       />
 
+      {/* ── Group By Controls ── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Group by:</span>
+          <Select value={groupBy || "none"} onValueChange={handleGroupByChange}>
+            <SelectTrigger className="w-[150px] h-8">
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              {GROUP_BY_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {groupBy && data?.groups && data.groups.length > 0 && (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={handleExpandAll}
+            >
+              <ChevronsDown className="h-3.5 w-3.5" />
+              Expand All
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1"
+              onClick={handleCollapseAll}
+            >
+              <ChevronsUp className="h-3.5 w-3.5" />
+              Collapse All
+            </Button>
+          </div>
+        )}
+      </div>
+
       {/* ── Bulk Actions Toolbar (visible when rows are selected) ── */}
       {selectedIds.size > 0 && (
         <BulkActionsToolbar
@@ -235,6 +333,10 @@ export function DevelopmentRequestsListPage() {
         onClearAllRecords={handleClearAllRecords}
         controlParams={controlParams}
         emptyState={emptyState}
+        groupBy={groupBy}
+        groups={data?.groups}
+        expandedGroups={expandedGroups}
+        onToggleGroup={handleToggleGroup}
       />
     </div>
   );
