@@ -165,7 +165,7 @@ export function RequestsCommandTable({
             {item.request_type?.name ?? "—"}
           </Badge>
         </TableCell>
-        <TableCell className="w-[150px]" onClick={(e) => e.stopPropagation()}>
+        <TableCell className="w-[150px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           {controlParams ? (
             <InlineStateEditor
               request={item}
@@ -189,7 +189,7 @@ export function RequestsCommandTable({
           <span className="block truncate max-w-[110px]">{item.functional_category?.name ?? "—"}</span>
         </TableCell>
         <TableCell
-          className="cursor-pointer min-w-[180px] max-w-[300px]"
+          className="cursor-pointer min-w-[200px] max-w-[600px]"
           onClick={() => handleNavigateToDetail(item.id)}
         >
           <span className="block text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis" title={item.title}>
@@ -345,8 +345,8 @@ export function RequestsCommandTable({
       )}
 
       {/* Table */}
-      <div className="rounded-md border overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]">
-        <Table>
+      <div className="rounded-md border overflow-x-auto max-h-[calc(100vh-220px)]">
+        <Table className="w-auto min-w-full">
           <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
             <TableRow>
               <TableHead className="w-10 pr-0">
@@ -364,7 +364,7 @@ export function RequestsCommandTable({
               <TableHead className="w-[150px]">State</TableHead>
               <TableHead className="w-[90px]">Priority</TableHead>
               <TableHead className="w-[120px]">Category</TableHead>
-              <TableHead className="min-w-[180px]">Title</TableHead>
+              <TableHead className="min-w-[200px] font-semibold">Title</TableHead>
               <TableHead className="w-[120px]">Assignee</TableHead>
               <TableHead className="w-[90px]">Date</TableHead>
             </TableRow>
