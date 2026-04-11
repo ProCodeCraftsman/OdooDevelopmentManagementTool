@@ -7,7 +7,7 @@ import {
   useControlParameters,
 } from "@/hooks/useDevelopmentRequests";
 import { developmentRequestsApi } from "@/api/development-requests";
-import type { DevelopmentRequestFilters, QueryState, GroupByOption } from "@/api/development-requests";
+import type { DevelopmentRequestFilters, QueryState } from "@/api/development-requests";
 import { useAssignableUsers } from "@/hooks/useUsers";
 import { useAuthStore } from "@/store/auth-store";
 import { QueryBar } from "@/components/development-requests/query-bar";
@@ -24,7 +24,6 @@ const PAGE_SIZE = 20;
 const DEFAULT_QUERY_STATE: QueryState = {
   filters: [],
   search: "",
-  group_by: null,
   show_archived: false,
 };
 
@@ -64,7 +63,6 @@ export function DevelopmentRequestsListPage() {
     return {
       ...filtersMap,
       search: queryState.search || undefined,
-      group_by: queryState.group_by ?? undefined,
       is_archived: queryState.show_archived ? undefined : false,
     };
   }, [queryState]);
@@ -217,8 +215,6 @@ export function DevelopmentRequestsListPage() {
       {/* ── Command Table ── */}
       <RequestsCommandTable
         data={data?.items ?? []}
-        groups={data?.groups}
-        groupBy={queryState.group_by as GroupByOption | null}
         isLoading={isLoading}
         pagination={pagination}
         pageIndex={page - 1}

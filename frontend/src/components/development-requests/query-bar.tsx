@@ -2,14 +2,8 @@ import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Search, X, Plus, Layers, Archive } from "lucide-react";
-import type { FilterToken, GroupByOption, QueryState } from "@/api/development-requests";
+import { Search, X, Plus, Archive } from "lucide-react";
+import type { FilterToken, QueryState } from "@/api/development-requests";
 import type { ControlParameters } from "@/api/development-requests";
 import { Switch } from "@/components/ui/switch";
 
@@ -26,13 +20,6 @@ const FILTER_FIELD_LABELS: Record<FilterField, string> = {
   priority_ids: "Priority",
   assigned_developer_ids: "Assignee",
 };
-
-const GROUP_BY_OPTIONS: { value: GroupByOption; label: string }[] = [
-  { value: "state_category", label: "State Category" },
-  { value: "assigned_developer", label: "Assignee" },
-  { value: "priority", label: "Priority" },
-  { value: "functional_category", label: "Functional Category" },
-];
 
 // ---------------------------------------------------------------------------
 // Props
@@ -198,36 +185,6 @@ export function QueryBar({ queryState, controlParams, assignableUsers, onChange 
             )}
           </PopoverContent>
         </Popover>
-
-        {/* Group By */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant={queryState.group_by ? "secondary" : "outline"}
-              size="sm"
-              className="h-8 gap-1.5"
-            >
-              <Layers className="h-3.5 w-3.5" />
-              {queryState.group_by
-                ? GROUP_BY_OPTIONS.find((g) => g.value === queryState.group_by)?.label ?? "Group By"
-                : "Group By"}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => update({ group_by: null })}>
-              None
-            </DropdownMenuItem>
-            {GROUP_BY_OPTIONS.map((g) => (
-              <DropdownMenuItem
-                key={g.value}
-                onClick={() => update({ group_by: g.value })}
-                className={queryState.group_by === g.value ? "font-medium" : ""}
-              >
-                {g.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
 
         {/* Show Archived toggle */}
         <label className="flex items-center gap-2 text-sm cursor-pointer select-none">

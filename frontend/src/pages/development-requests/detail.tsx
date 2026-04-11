@@ -421,6 +421,10 @@ export function DevelopmentRequestsDetailPage() {
     } catch { /* handled by mutation */ }
   };
 
+  const handleDeleteLine = (lineId: number) => {
+    deleteLineMutation.mutate({ requestId, lineId });
+  };
+
   // ---------------------------------------------------------------------------
   // Render helpers
   // ---------------------------------------------------------------------------
@@ -1209,10 +1213,6 @@ export function DevelopmentRequestsDetailPage() {
       />
     </div>
   );
-
-  function handleDeleteLine(lineId: number) {
-    deleteLineMutation.mutate({ requestId, lineId });
-  }
 }
 
 // ─── Linked Release Plans Tab ─────────────────────────────────────────────────

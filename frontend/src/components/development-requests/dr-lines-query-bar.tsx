@@ -2,13 +2,7 @@ import { useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Search, X, Plus, Layers } from "lucide-react";
+import { Search, X, Plus } from "lucide-react";
 import type { DevelopmentRequestLineFilters } from "@/api/development-requests";
 
 type FilterField = "module_names" | "uat_statuses";
@@ -23,11 +17,6 @@ const UAT_STATUS_OPTIONS = [
   { id: "in_progress", label: "In Progress" },
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Rejected" },
-];
-
-const GROUP_BY_OPTIONS: { value: string; label: string }[] = [
-  { value: "module", label: "Module" },
-  { value: "uat_status", label: "UAT Status" },
 ];
 
 interface Props {
@@ -173,42 +162,13 @@ export function DrLinesQueryBar({ filters, onChange }: Props) {
           </PopoverContent>
         </Popover>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant={filters.group_by ? "secondary" : "outline"}
-              size="sm"
-              className="h-8 gap-1.5"
-            >
-              <Layers className="h-3.5 w-3.5" />
-              {filters.group_by
-                ? GROUP_BY_OPTIONS.find((g) => g.value === filters.group_by)?.label ?? "Group By"
-                : "Group By"}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => update({ group_by: undefined })}>
-              None
-            </DropdownMenuItem>
-            {GROUP_BY_OPTIONS.map((g) => (
-              <DropdownMenuItem
-                key={g.value}
-                onClick={() => update({ group_by: g.value as "module" | "uat_status" })}
-                className={filters.group_by === g.value ? "font-medium" : ""}
-              >
-                {g.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         {hasActiveFilters && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 text-muted-foreground"
             onClick={() =>
-              onChange({ module_names: undefined, uat_statuses: undefined, search: undefined, group_by: undefined })
+              onChange({ module_names: undefined, uat_statuses: undefined, search: undefined })
             }
           >
             Clear All

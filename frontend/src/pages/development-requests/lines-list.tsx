@@ -1,4 +1,4 @@
-import { Fragment, useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useDevelopmentRequestLines } from "@/hooks/useDevelopmentRequests";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { RequestModuleLineWithRequest, DevelopmentRequestLineFilters, GroupInfo } from "@/api/development-requests";
-import { Download, SearchX, Archive, ChevronRight, ChevronDown, X } from "lucide-react";
+import type { RequestModuleLineWithRequest, DevelopmentRequestLineFilters } from "@/api/development-requests";
+import { Download, SearchX, Archive, X } from "lucide-react";
 import { toast } from "sonner";
 import { developmentRequestsApi } from "@/api/development-requests";
 import { DrLinesQueryBar } from "@/components/development-requests/dr-lines-query-bar";
@@ -26,7 +26,6 @@ const DEFAULT_FILTERS: DevelopmentRequestLineFilters = {
   module_names: undefined,
   uat_statuses: undefined,
   search: undefined,
-  group_by: undefined,
 };
 
 const UAT_STATUS_COLORS: Record<string, string> = {
@@ -37,21 +36,6 @@ const UAT_STATUS_COLORS: Record<string, string> = {
 };
 
 const COLS = 8;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function getGroupKey(item: RequestModuleLineWithRequest, groupBy: "module" | "uat_status"): string {
-  if (groupBy === "module") return item.module_technical_name ?? "—";
-  if (groupBy === "uat_status") return item.uat_status ?? "_none";
-  return "";
-}
-
-function getGroupLabel(key: string, groupBy: "module" | "uat_status"): string {
-  if (groupBy === "uat_status" && key === "_none") return "No UAT Status";
-  return key;
-}
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -66,23 +50,6 @@ export function DevelopmentRequestLinesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [allRecordsSelected, setAllRecordsSelected] = useState(false);
 
-  // Collapsible groups - persist to localStorage
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    const stored = localStorage.getItem("dr-lines-collapsed-groups");
-    return stored ? new Set(JSON.parse(stored)) : new Set();
-  });
-
-  // Sync to localStorage when changed
-  useEffect(() => {
-    localStorage.setItem("dr-lines-collapsed-groups", JSON.stringify([...collapsedGroups]));
-  }, [collapsedGroups]);
-
-  // Reset collapsed groups when group_by changes
-  useEffect(() => {
-    setCollapsedGroups(new Set());
-  }, [filters.group_by]);
-
   // Export loading
   const [isExporting, setIsExporting] = useState(false);
 
@@ -90,14 +57,12 @@ export function DevelopmentRequestLinesPage() {
     module_names: filters.module_names,
     uat_statuses: filters.uat_statuses,
     search: filters.search || undefined,
-    group_by: filters.group_by || undefined,
   }), [filters]);
 
   const { data, isLoading } = useDevelopmentRequestLines(apiFilters, page, pageSize);
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const totalRecords = data?.total ?? 0;
-  const groups = useMemo<GroupInfo[]>(() => data?.groups ?? [], [data]);
 
   // ---------------------------------------------------------------------------
   // Filter / page change
@@ -177,22 +142,6 @@ export function DevelopmentRequestLinesPage() {
   }, [selectedIds, apiFilters]);
 
   // ---------------------------------------------------------------------------
-  // Group toggle
-  // ---------------------------------------------------------------------------
-
-  const toggleGroup = useCallback((key: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }, []);
-
-  // ---------------------------------------------------------------------------
   // Pagination
   // ---------------------------------------------------------------------------
 
@@ -201,42 +150,6 @@ export function DevelopmentRequestLinesPage() {
   // ---------------------------------------------------------------------------
   // Table body builder
   // ---------------------------------------------------------------------------
-
-  const groupedSections = useMemo(() => {
-    if (!filters.group_by) {
-      return [];
-    }
-
-    const groupBy = filters.group_by;
-    const rowsByGroup = new Map<string, RequestModuleLineWithRequest[]>();
-    for (const item of items) {
-      const key = getGroupKey(item, groupBy);
-      const existingRows = rowsByGroup.get(key);
-      if (existingRows) {
-        existingRows.push(item);
-      } else {
-        rowsByGroup.set(key, [item]);
-      }
-    }
-
-    if (groups.length > 0) {
-      return groups.map((group) => ({
-        key: group.key,
-        label: getGroupLabel(group.key, groupBy),
-        count: group.count,
-        collapsed: collapsedGroups.has(group.key),
-        items: rowsByGroup.get(group.key) ?? [],
-      }));
-    }
-
-    return Array.from(rowsByGroup.entries()).map(([key, groupItems]) => ({
-      key,
-      label: getGroupLabel(key, groupBy),
-      count: groupItems.length,
-      collapsed: collapsedGroups.has(key),
-      items: groupItems,
-    }));
-  }, [filters.group_by, groups, items, collapsedGroups]);
 
   const renderLineRow = useCallback((item: RequestModuleLineWithRequest) => {
     const isSelected = selectedIds.has(item.id);
@@ -291,40 +204,8 @@ export function DevelopmentRequestLinesPage() {
   }, [selectedIds, handleToggleRow]);
 
   const tableBodyRows = useMemo(() => {
-    if (!filters.group_by) {
-      return items.map((item) => renderLineRow(item));
-    }
-
-    return groupedSections.map((section) => (
-      <Fragment key={`group-section-${section.key}`}>
-        <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={COLS} className="p-0">
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-              onClick={() => toggleGroup(section.key)}
-              aria-expanded={!section.collapsed}
-            >
-              {section.collapsed ? (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-              <span>{section.label}</span>
-              <Badge variant="secondary" className="text-xs py-0 px-1.5">
-                {section.count}
-              </Badge>
-            </button>
-          </TableCell>
-        </TableRow>
-        {!section.collapsed && section.items.map((item) => (
-          <Fragment key={`group-row-${section.key}-${item.id}`}>
-            {renderLineRow(item)}
-          </Fragment>
-        ))}
-      </Fragment>
-    ));
-  }, [filters.group_by, groupedSections, items, renderLineRow, toggleGroup]);
+    return items.map((item) => renderLineRow(item));
+  }, [items, renderLineRow]);
 
   // ---------------------------------------------------------------------------
   // Render

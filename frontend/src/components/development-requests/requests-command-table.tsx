@@ -4,7 +4,6 @@
  * High-density, interactive table for Development Requests.
  * Responsibilities:
  *  - Row checkboxes + "select all on page" + "select all N records" banner
- *  - Group-by header rows (collapsible) injected between sorted items
  *  - Inline state editing (InlineStateEditor)
  *  - Inline assignee editing (InlineAssigneeEditor)
  *  - Sticky header
@@ -12,7 +11,7 @@
  *  - Click-through to detail view (non-interactive cells only)
  */
 
-import { Fragment, useState, useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -28,13 +27,8 @@ import {
 } from "@/components/ui/table";
 import { InlineStateEditor } from "@/components/development-requests/inline-state-editor";
 import { InlineAssigneeEditor } from "@/components/development-requests/inline-assignee-editor";
-import type {
-  DevelopmentRequest,
-  GroupInfo,
-  GroupByOption,
-} from "@/api/development-requests";
+import type { DevelopmentRequest } from "@/api/development-requests";
 import type { ControlParameters } from "@/api/development-requests";
-import { ChevronRight, ChevronDown } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,25 +41,6 @@ function getPriorityClass(level: number): string {
   return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
 }
 
-function getGroupKeyForItem(item: DevelopmentRequest, groupBy: GroupByOption): string {
-  switch (groupBy) {
-    case "state_category":
-      return item.request_state?.category ?? "_none";
-    case "assigned_developer":
-      return item.assigned_developer?.username ?? "_unassigned";
-    case "priority":
-      return item.priority?.name ?? "_none";
-    case "functional_category":
-      return item.functional_category?.name ?? "_none";
-  }
-}
-
-function getGroupDisplayLabel(key: string, groupBy: GroupByOption): string {
-  if (groupBy === "assigned_developer" && key === "_unassigned") return "Unassigned";
-  if (key === "_none") return "None";
-  return key;
-}
-
 const COLS = 9;
 
 // ---------------------------------------------------------------------------
@@ -74,8 +49,6 @@ const COLS = 9;
 
 interface Props {
   data: DevelopmentRequest[];
-  groups?: GroupInfo[];
-  groupBy?: GroupByOption | null;
   isLoading: boolean;
   pagination?: {
     total_records: number;
@@ -106,8 +79,6 @@ interface Props {
 
 export function RequestsCommandTable({
   data,
-  groups,
-  groupBy,
   isLoading,
   pagination,
   pageIndex,
@@ -123,79 +94,11 @@ export function RequestsCommandTable({
   emptyState,
 }: Props) {
   const navigate = useNavigate();
-  
-  // Persist collapsed groups to localStorage
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    const stored = localStorage.getItem("dr-collapsed-groups");
-    return stored ? new Set(JSON.parse(stored)) : new Set();
-  });
-
-  const activeCollapsedGroups = useMemo(() => {
-    if (!groupBy || !groups?.length) {
-      return collapsedGroups;
-    }
-
-    const currentKeys = new Set(groups.map((group) => group.key));
-    return new Set([...collapsedGroups].filter((key) => currentKeys.has(key)));
-  }, [collapsedGroups, groupBy, groups]);
-
-  // Sync to localStorage when changed
-  useEffect(() => {
-    localStorage.setItem("dr-collapsed-groups", JSON.stringify([...activeCollapsedGroups]));
-  }, [activeCollapsedGroups]);
 
   const handleNavigateToDetail = useCallback((id: number) => {
     const siblingIds = data.map((item) => item.id);
     navigate(`/development-requests/${id}`, { state: { siblingIds } });
   }, [navigate, data]);
-
-  const toggleGroup = useCallback((key: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }, []);
-
-  const groupedSections = useMemo(() => {
-    if (!groupBy) {
-      return [];
-    }
-
-    const rowsByGroup = new Map<string, DevelopmentRequest[]>();
-    for (const item of data) {
-      const key = getGroupKeyForItem(item, groupBy);
-      const existingRows = rowsByGroup.get(key);
-      if (existingRows) {
-        existingRows.push(item);
-      } else {
-        rowsByGroup.set(key, [item]);
-      }
-    }
-
-    if (groups?.length) {
-      return groups.map((group) => ({
-        key: group.key,
-        label: getGroupDisplayLabel(group.key, groupBy),
-        count: group.count,
-        collapsed: activeCollapsedGroups.has(group.key),
-        items: rowsByGroup.get(group.key) ?? [],
-      }));
-    }
-
-    return Array.from(rowsByGroup.entries()).map(([key, groupItems]) => ({
-      key,
-      label: getGroupDisplayLabel(key, groupBy),
-      count: groupItems.length,
-      collapsed: activeCollapsedGroups.has(key),
-      items: groupItems,
-    }));
-  }, [groupBy, groups, data, activeCollapsedGroups]);
 
   const allOnPageSelected = data.length > 0 && data.every((r) => selectedIds.has(r.id));
   const someOnPageSelected = data.some((r) => selectedIds.has(r.id)) && !allOnPageSelected;
@@ -296,40 +199,8 @@ export function RequestsCommandTable({
   }, [selectedIds, handleNavigateToDetail, controlParams, handleToggleRow]);
 
   const tableBodyRows = useMemo(() => {
-    if (!groupBy) {
-      return data.map((item) => renderRequestRow(item));
-    }
-
-    return groupedSections.map((section) => (
-      <Fragment key={`group-section-${section.key}`}>
-        <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={COLS} className="p-0">
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-              onClick={() => toggleGroup(section.key)}
-              aria-expanded={!section.collapsed}
-            >
-              {section.collapsed ? (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-              <span>{section.label}</span>
-              <Badge variant="secondary" className="text-xs py-0 px-1.5">
-                {section.count}
-              </Badge>
-            </button>
-          </TableCell>
-        </TableRow>
-        {!section.collapsed && section.items.map((item) => (
-          <Fragment key={`group-row-${section.key}-${item.id}`}>
-            {renderRequestRow(item)}
-          </Fragment>
-        ))}
-      </Fragment>
-    ));
-  }, [groupBy, data, groupedSections, renderRequestRow, toggleGroup]);
+    return data.map((item) => renderRequestRow(item));
+  }, [data, renderRequestRow]);
 
   // ---------------------------------------------------------------------------
   // Loading skeleton
