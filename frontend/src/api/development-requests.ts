@@ -126,7 +126,7 @@ export interface DevelopmentRequestLineFilters {
   module_names?: string;
   uat_statuses?: string;
   search?: string;
-  group_by?: "module" | "uat_status";
+  group_by?: "module" | "uat_status" | "request_type" | "request_state" | "functional_category" | "priority" | "assigned_developer";
 }
 
 export interface RequestReleasePlanLine {

@@ -2,6 +2,8 @@ from typing import List, Optional, Tuple, Dict
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 from app.models.development_request import RequestModuleLine, DevelopmentRequest
+from app.models.control_parameters import RequestType, RequestState, FunctionalCategory, Priority
+from app.models.user import User
 from app.repositories.base import BaseRepository
 
 
@@ -85,6 +87,15 @@ class RequestModuleLineRepository(BaseRepository[RequestModuleLine]):
                 query = query.order_by(RequestModuleLine.module_technical_name, RequestModuleLine.created_at.desc())
             elif group_by == "uat_status":
                 query = query.order_by(RequestModuleLine.uat_status, RequestModuleLine.created_at.desc())
+            elif group_by == "assigned_developer":
+                # Join with DevelopmentRequest and User for ordering
+                query = query.join(DevelopmentRequest, RequestModuleLine.request_id == DevelopmentRequest.id).outerjoin(
+                    User, DevelopmentRequest.assigned_developer_id == User.id
+                )
+                query = query.order_by(func.coalesce(User.username, "Unassigned"), RequestModuleLine.created_at.desc())
+            else:
+                # Default ordering by created_at for other group_by values
+                query = query.order_by(RequestModuleLine.created_at.desc())
         else:
             query = query.order_by(RequestModuleLine.created_at.desc())
 
@@ -98,11 +109,17 @@ class RequestModuleLineRepository(BaseRepository[RequestModuleLine]):
         uat_statuses=None,
         search=None,
     ) -> List[Dict]:
+        # Ensure DR join is applied for all group_by except module and uat_status
+        needs_dr_join = group_by not in ("module", "uat_status")
+
         if group_by == "module":
             base = self.db.query(
                 RequestModuleLine.module_technical_name.label("key"),
                 RequestModuleLine.module_technical_name.label("label"),
                 func.count(RequestModuleLine.id).label("count"),
+            )
+            base = base.join(
+                DevelopmentRequest, RequestModuleLine.request_id == DevelopmentRequest.id
             )
             base = self._apply_filters(base, module_names, uat_statuses, search)
             rows = base.group_by(RequestModuleLine.module_technical_name).order_by(RequestModuleLine.module_technical_name).all()
@@ -112,8 +129,76 @@ class RequestModuleLineRepository(BaseRepository[RequestModuleLine]):
                 func.coalesce(RequestModuleLine.uat_status, "None").label("label"),
                 func.count(RequestModuleLine.id).label("count"),
             )
+            base = base.join(
+                DevelopmentRequest, RequestModuleLine.request_id == DevelopmentRequest.id
+            )
             base = self._apply_filters(base, module_names, uat_statuses, search)
             rows = base.group_by(RequestModuleLine.uat_status).order_by(RequestModuleLine.uat_status.nulls_last()).all()
+        elif group_by == "request_type":
+            base = self.db.query(
+                RequestType.name.label("key"),
+                RequestType.name.label("label"),
+                func.count(RequestModuleLine.id).label("count"),
+            )
+            base = base.join(
+                DevelopmentRequest, RequestModuleLine.request_id == DevelopmentRequest.id
+            ).join(
+                RequestType, DevelopmentRequest.request_type_id == RequestType.id
+            )
+            base = self._apply_filters(base, module_names, uat_statuses, search)
+            rows = base.group_by(RequestType.name, RequestType.display_order).order_by(RequestType.display_order, RequestType.name).all()
+        elif group_by == "request_state":
+            base = self.db.query(
+                RequestState.name.label("key"),
+                RequestState.name.label("label"),
+                func.count(RequestModuleLine.id).label("count"),
+            )
+            base = base.join(
+                DevelopmentRequest, RequestModuleLine.request_id == DevelopmentRequest.id
+            ).join(
+                RequestState, DevelopmentRequest.request_state_id == RequestState.id
+            )
+            base = self._apply_filters(base, module_names, uat_statuses, search)
+            rows = base.group_by(RequestState.name, RequestState.display_order).order_by(RequestState.display_order, RequestState.name).all()
+        elif group_by == "functional_category":
+            base = self.db.query(
+                FunctionalCategory.name.label("key"),
+                FunctionalCategory.name.label("label"),
+                func.count(RequestModuleLine.id).label("count"),
+            )
+            base = base.join(
+                DevelopmentRequest, RequestModuleLine.request_id == DevelopmentRequest.id
+            ).join(
+                FunctionalCategory, DevelopmentRequest.functional_category_id == FunctionalCategory.id
+            )
+            base = self._apply_filters(base, module_names, uat_statuses, search)
+            rows = base.group_by(FunctionalCategory.name).order_by(FunctionalCategory.name).all()
+        elif group_by == "priority":
+            base = self.db.query(
+                Priority.name.label("key"),
+                Priority.name.label("label"),
+                func.count(RequestModuleLine.id).label("count"),
+            )
+            base = base.join(
+                DevelopmentRequest, RequestModuleLine.request_id == DevelopmentRequest.id
+            ).join(
+                Priority, DevelopmentRequest.priority_id == Priority.id
+            )
+            base = self._apply_filters(base, module_names, uat_statuses, search)
+            rows = base.group_by(Priority.name, Priority.level).order_by(Priority.level.desc(), Priority.name).all()
+        elif group_by == "assigned_developer":
+            base = self.db.query(
+                func.coalesce(User.username, "_unassigned").label("key"),
+                func.coalesce(User.username, "Unassigned").label("label"),
+                func.count(RequestModuleLine.id).label("count"),
+            )
+            base = base.join(
+                DevelopmentRequest, RequestModuleLine.request_id == DevelopmentRequest.id
+            ).outerjoin(
+                User, DevelopmentRequest.assigned_developer_id == User.id
+            )
+            base = self._apply_filters(base, module_names, uat_statuses, search)
+            rows = base.group_by(User.username).order_by(func.coalesce(User.username, "Unassigned")).all()
         else:
             return []
         
