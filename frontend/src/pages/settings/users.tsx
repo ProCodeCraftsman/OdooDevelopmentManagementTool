@@ -40,7 +40,7 @@ const createUserSchema = z.object({
 
 const editUserSchema = z.object({
   username: z.string().min(1, "Username is required"),
-  email: z.string().email("Invalid email"),
+  email: z.string().min(1, "Email is required").email("Invalid email"),
   password: z.string().optional(),
   is_active: z.boolean(),
   role_ids: z.array(z.number()),
