@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Environment files (not needed in container)
+.env
+.env.local
+.env.*
+
+# IDE
+.vscode
+.idea
+*.swp
+*~
+
+# Testing
+__pycache__
+.pytest_cache
+.coverage
+htmlcov/
+
+# Dependencies installed during build
+node_modules/
+
+# Build outputs (regenerated during build)
+.next/
+out/
+.turbo/
+dist/
+.eslintcache
+
+# Documentation (not needed)
+*.md
+README*
+LICENSE
+
+# Docker-related (not needed in build)
+.dockerignore
+Dockerfile
+docker-compose*.yml

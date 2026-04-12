@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+.gitmodules
+
+# Planning and documentation
+.planning
+CLAUDE.md
+AGENTS.md
+CONTROL.md
+*.md
+
+# IDE and editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.local
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.log.*
+logs/
+
+# Legacy data
+Legacy/
+Data/
+
+# Backend temp files (excluded from backend build context)
+backend/__pycache__
+backend/*.pyc
+backend/*.pyo
+backend/.pytest_cache
+backend/htmlcov
+backend/dist
+backend/build
+backend/instance/
+
+# Frontend temp files (excluded from frontend build context)
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/.turbo
+frontend/dist
+frontend/.eslintcache
+
+# Docker
+docker-compose.override.yml
+*.Dockerfile
