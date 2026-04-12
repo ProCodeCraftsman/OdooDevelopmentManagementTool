@@ -1,0 +1,25 @@
+# =============================================================================
+# Frontend Development Dockerfile
+# =============================================================================
+# Enables HMR with Vite.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.override.yml up
+# =============================================================================
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY frontend/package.json frontend/package-lock.json* ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source (will be overridden by volumes in override file)
+COPY frontend/ ./
+
+# Expose Vite dev server
+EXPOSE 5173
+
+# Run with HMR
+CMD ["npm", "run", "dev"]

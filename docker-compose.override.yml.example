@@ -1,0 +1,21 @@
+# =============================================================================
+# Development Override Configuration - EXAMPLE
+# =============================================================================
+# Copy this to docker-compose.override.yml to enable hot development.
+# DO NOT commit docker-compose.override.yml - it's for local development only.
+# =============================================================================
+
+services:
+  backend:
+    volumes:
+      - ./backend/app:/app/app:delegated
+      - ./backend/alembic:/app/alembic:delegated
+    environment:
+      - APP_ENV=development
+      - APP_DEBUG=true
+
+  frontend:
+    volumes:
+      - ./frontend/src:/app/src:delegated
+    environment:
+      - VITE_USE_HMR=true

@@ -119,3 +119,4 @@ backend/scripts/seed_*.py
 Legacy/
 .gitnexus
 .DS_Store
+docker-compose.override.yml
