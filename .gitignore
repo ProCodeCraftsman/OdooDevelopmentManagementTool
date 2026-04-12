@@ -118,3 +118,4 @@ backend/scripts/seed_*.py
 # Legacy (old code)
 Legacy/
 .gitnexus
+.DS_Store
