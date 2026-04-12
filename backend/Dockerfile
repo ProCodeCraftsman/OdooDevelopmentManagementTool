@@ -25,6 +25,7 @@ WORKDIR /app
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
@@ -36,7 +37,15 @@ COPY --from=builder /root/.local /home/appuser/.local
 # Copy application code
 COPY --chown=appuser:appuser app/ ./app/
 COPY --chown=appuser:appuser alembic/ ./alembic/
+COPY --chown=appuser:appuser scripts/ ./scripts/
 COPY --chown=appuser:appuser requirements.txt .
+COPY --chown=appuser:appuser alembic.ini .
+
+# Copy import data (development requests)
+COPY --chown=appuser:appuser import_data/ ./import_data/
+
+# Make entrypoint executable
+RUN chmod +x scripts/init.sh
 
 # Set PATH to include user-local bin
 ENV PATH=/home/appuser/.local/bin:$PATH
@@ -46,4 +55,4 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/app/scripts/init.sh"]

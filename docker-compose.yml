@@ -51,7 +51,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "wget -O - http://localhost:8000/health | grep -q healthy"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -67,12 +67,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api/v1
     container_name: odoo_auditor_frontend
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      test: ["CMD-SHELL", "wget -O - http://127.0.0.1:80 2>/dev/null | grep -qi \"<!DOCTYPE html\""]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -96,7 +98,7 @@ services:
       frontend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
+      test: ["CMD-SHELL", "wget -O - http://127.0.0.1:80 2>/dev/null | grep -qi \"<!DOCTYPE html\""]
       interval: 10s
       timeout: 5s
       retries: 3

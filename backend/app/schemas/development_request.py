@@ -121,7 +121,7 @@ class PaginatedRequestModuleLineResponse(BaseModel):
     page: int
     limit: int
     pages: int
-    groups: Optional[List[GroupInfo]] = None
+    groups: Optional[List["GroupInfo"]] = None
 
 
 class BulkModuleLineCreate(BaseModel):

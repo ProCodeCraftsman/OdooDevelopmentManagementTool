@@ -2,6 +2,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
+import os
 
 config = context.config
 
@@ -9,6 +10,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from app.core.database import engine
+from app.core.config import get_settings
 from app.models.base import Base
 from app.models.user import User
 from app.models.environment import Environment
@@ -34,11 +36,9 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Use the existing database engine from app
+    # which reads DATABASE_URL from environment
+    connectable = engine
 
     with connectable.connect() as connection:
         context.configure(
