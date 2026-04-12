@@ -2,13 +2,26 @@
 
 GPS Odoo Tracker is a comprehensive operations management system for Odoo 17, combining environment synchronization, module/version auditing, development request tracking, release planning, and role-based access control.
 
+## Quick Start (Docker)
+
+```bash
+# Clone and run
+git clone https://github.com/ProCodeCraftsman/OdooDevelopmentManagementTool.git
+cd OdooDevelopmentManagementTool
+docker compose up -d
+
+# Access at http://localhost/
+# Login: admin / changeme
+```
+
 ## Project Structure
 
 This is a monorepo consisting of:
 
 - `backend/`: FastAPI application with SQLAlchemy, PostgreSQL, and Alembic.
 - `frontend/`: React 19 + Vite SPA with TypeScript, TanStack Query, Zustand, and Tailwind CSS.
-- `docs/`: Detailed project documentation and architecture artifacts.
+- `nginx/`: Reverse proxy configuration.
+- `docs/`: Detailed project documentation.
 
 ## Key Features
 
@@ -21,50 +34,83 @@ This is a monorepo consisting of:
 
 ## Getting Started
 
-### Prerequisites
+### Option 1: Docker (Recommended)
 
-- Python 3.10+
+```bash
+# 1. Clone the repository
+git clone https://github.com/ProCodeCraftsman/OdooDevelopmentManagementTool.git
+cd OdooDevelopmentManagementTool
+
+# 2. Create .env file
+cp .env.example .env
+
+# 3. Start all services
+docker compose up -d
+
+# 4. Access the application
+# Frontend: http://localhost/
+# API: http://localhost/api/v1/
+```
+
+**Default login:** `admin` / `changeme`
+
+### Option 2: Local Development
+
+#### Prerequisites
+
+- Python 3.11+
 - Node.js 20+
-- PostgreSQL
-- Docker & Docker Compose (optional)
+- PostgreSQL 16+
 
-### Backend Setup
+#### Backend Setup
 
-1. Navigate to the `backend/` directory.
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Set up your environment variables (copy `.env.example` to `.env` if available).
-5. Run migrations:
-   ```bash
-   alembic upgrade head
-   ```
-6. Start the development server:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
+```bash
+cd backend
 
-### Frontend Setup
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-1. Navigate to the `frontend/` directory.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your database credentials
+
+# Run migrations
+alembic upgrade head
+
+# Seed data (optional)
+python scripts/seed_roles.py
+python scripts/seed_development_request_params.py
+python scripts/seed_admin.py
+
+# Start server
+uvicorn app.main:app --reload
+```
+
+#### Frontend Setup
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
 
 ## Documentation
 
-For more detailed information, refer to the files in the `docs/` directory:
+For detailed setup and configuration, see:
+
+- [Setup Guide](docs/SETUP.md) - Complete Docker setup and troubleshooting
+- [API Documentation](docs/API.md) - API endpoints reference
+- [Architecture](docs/ARCHITECTURE.md) - System design
+
+Additional documentation in `docs/`:
 
 - [Project Summary](docs/ProjectSummary.md)
 - [Development Requests](docs/DevelopmentRequests.md)
@@ -78,7 +124,7 @@ For more detailed information, refer to the files in the `docs/` directory:
 ### Backend
 - **Framework:** FastAPI
 - **ORM:** SQLAlchemy 2.x
-- **Database:** PostgreSQL
+- **Database:** PostgreSQL 16
 - **Migrations:** Alembic
 - **Auth:** JWT with rotating refresh tokens (httpOnly cookies)
 
@@ -88,6 +134,11 @@ For more detailed information, refer to the files in the `docs/` directory:
 - **Styling:** Tailwind CSS + Radix UI (shadcn/ui style)
 - **State Management:** Zustand & TanStack Query v5
 - **Icons:** Lucide React
+
+### Infrastructure
+- **Container:** Docker Compose
+- **Reverse Proxy:** Nginx
+- **Database:** PostgreSQL (Alpine)
 
 ## Testing
 
